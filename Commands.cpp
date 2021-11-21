@@ -77,6 +77,60 @@ void _removeBackgroundSign(char* cmd_line) {
 
 // TODO: Add your implementation for classes in Commands.h 
 
+void JobsList::addJob(Command* cmd, bool isStopped = false){
+    if(isStopped) job_list.insert(JobList::JobEntry(job_list.size() + 1, getPidByCmd(cmd), Stopped)); // need to implement the getPidByCmd Function!!
+    else job_list.insert(JobList::JobEntry(job_list.size() + 1, getPidByCmd(cmd), Background));
+}
+
+auto printJob = [](const JobList::JobEntry& job){
+  if(job.IsStoppedStatus()){
+    std::cout << "";   //implementation
+    }
+  }
+void JobsList::printJobsList(){
+    std::for_each(job_list.begin(), job_list.end(), printJob);
+}
+
+auto killJob = [](const JobList::JobEntry& job){
+  //implementation
+}
+
+void JobsList::killAllJobs(){
+    std::for_each(job_list.begin(), job_list.end(), killJob);
+}
+
+auto removejob = [](const JobList::JobEntry& job){
+  //implementation
+}
+
+void JobsList::removeFinishedJobs(){
+    std::for_each(job_list.begin(), job_list.end(), removejob);
+}
+
+JobEntry* JobsList::getJobById(int jobId){
+  if(job_list.size() > jobId && job_list[jobId-1].getJobId() > 0) return &job_list[jobId - 1];
+  else return nullptr;
+}
+
+void JobsList::removeJobById(int jobId){
+  if(job_list[jobId - 1].getJobId() < 0) return;
+  else job_list.erase(job_list[jobId - 1]);
+}
+
+JobEntry* JobsList::getLastJob(int* lastJobId){
+  return job_list.pop_back();
+}
+
+JobEntry* JobsList::getLastStoppedJob(int *jobId){
+  do{
+    JobList::JobEntry iter = job_list.pop_back();
+  }
+  while(iter.IsStoppedStatus() == false || iter == job_list.begin());
+  if(iter.IsStoppedStatus()) return &iter;
+  else return nullptr;
+}
+  
+
 SmallShell::SmallShell() {
 // TODO: add your implementation
 }
