@@ -98,7 +98,6 @@ public:
         ~JobEntry() = default;
         state getJobState(){return command_state;}
         bool IsStoppedStatus(){return command_state == Stopped;}
-        void killJob();
         int getPID(){ return PID;}
         int getJobID(){ return jobID;}
 };
