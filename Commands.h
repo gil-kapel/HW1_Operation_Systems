@@ -3,20 +3,20 @@
 
 #include <vector>
 #include <string>
-
+using namespace std;
 #define COMMAND_ARGS_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
-const std::string WHITESPACE = " \n\r\t\f\v";
 
+const string WHITESPACE = " \n\r\t\f\v";
 
 class Command{
-    std::string cmd_line;
+    string cmd_line;
 public:
     Command(const char* cmd_line): cmd_line(cmd_line); {}
     virtual ~Command();
     virtual void execute() = 0;
-    virtual void prepare();
-    virtual void cleanup();
+    // virtual void prepare();
+    // virtual void cleanup();
     std::string getCmdLine() { return cmd_line; }
     // TODO: Add your extra methods if needed
 };
@@ -53,14 +53,14 @@ class RedirectionCommand : public Command {
 };
 
 class ChangeDirCommand : public BuiltInCommand {
-    std::string* plastPwd;
+    string* plastPwd;
 public:
     ChangeDirCommand(const char* cmd_line, char** plastPwd): BuiltInCommand(cmd_line){
         this->plastPwd = new std::string(plastPwd);
     }
     virtual ~ChangeDirCommand() {}
     void execute() override;
-    std::string* getPlastPwd(){return plastPwd;}
+    string* getPlastPwd(){return plastPwd;}
 };
 
 class GetCurrDirCommand : public BuiltInCommand {
@@ -76,7 +76,6 @@ class ShowPidCommand : public BuiltInCommand {
     virtual ~ShowPidCommand() {}
     void execute() override;
 };
-
 
 class JobsList;
 class QuitCommand : public BuiltInCommand {
@@ -124,7 +123,6 @@ public:
     // TODO: Add extra methods or modify exisitng ones as needed
 };
 
-
 class JobsCommand : public BuiltInCommand {
 JobsList* jobs;
 public:
@@ -171,7 +169,7 @@ class SmallShell {
     SmallShell();
  public:
     Command *CreateCommand(const char* cmd_line);
-    SmallShell(SmallShell const&)            = delete; // disable copy ctor
+    SmallShell(SmallShell const&)        = delete; // disable copy ctor
     void operator=(SmallShell const&)    = delete; // disable = operator
     static SmallShell& getInstance() // make SmallShell singleton
     {
@@ -183,5 +181,7 @@ class SmallShell {
     void executeCommand(const char* cmd_line);
     // TODO: add extra methods as needed
 };
+
+
 
 #endif //SMASH_COMMAND_H_
