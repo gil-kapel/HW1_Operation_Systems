@@ -2,33 +2,34 @@
 #define SMASH_COMMAND_H_
 
 #include <vector>
+#include <string>
 
 #define COMMAND_ARGS_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
+const std::string WHITESPACE = " \n\r\t\f\v";
+
 
 class Command{
-    const char* cmd_line;
+    std::string cmd_line;
 public:
-    Command(const char* cmd_line);
+    Command(const char* cmd_line): cmd_line(cmd_line); {}
     virtual ~Command();
     virtual void execute() = 0;
-    //virtual void prepare();
-    //virtual void cleanup();
+    virtual void prepare();
+    virtual void cleanup();
+    std::string getCmdLine() { return cmd_line; }
     // TODO: Add your extra methods if needed
 };
-Command::Command(const char* cmd_line){
-    cmd_line = new const char[COMMAND_ARGS_MAX_LENGTH];
-}
 
 class BuiltInCommand : public Command{
 public:
-    BuiltInCommand(const char* cmd_line);
+    BuiltInCommand(const char* cmd_line): Command(cmd_line){}
     virtual ~BuiltInCommand() {}
 };
 
 class ExternalCommand : public Command {
 public:
-    ExternalCommand(const char* cmd_line);
+    ExternalCommand(const char* cmd_line): Command(cmd_line){}
     virtual ~ExternalCommand() {}
     void execute() override;
 };
@@ -36,7 +37,7 @@ public:
 class PipeCommand : public Command {
     // TODO: Add your data members
  public:
-    PipeCommand(const char* cmd_line);
+    PipeCommand(const char* cmd_line): Command(cmd_line){}
     virtual ~PipeCommand() {}
     void execute() override;
 };
@@ -52,23 +53,26 @@ class RedirectionCommand : public Command {
 };
 
 class ChangeDirCommand : public BuiltInCommand {
-    char** plastPwd;
+    std::string* plastPwd;
 public:
-    ChangeDirCommand(const char* cmd_line, char** plastPwd);
+    ChangeDirCommand(const char* cmd_line, char** plastPwd): BuiltInCommand(cmd_line){
+        this->plastPwd = new std::string(plastPwd);
+    }
     virtual ~ChangeDirCommand() {}
     void execute() override;
+    std::string* getPlastPwd(){return plastPwd;}
 };
 
 class GetCurrDirCommand : public BuiltInCommand {
  public:
-    GetCurrDirCommand(const char* cmd_line);
+    GetCurrDirCommand(const char* cmd_line): BuiltInCommand(cmd_line){}
     virtual ~GetCurrDirCommand() {}
     void execute() override;
 };
 
 class ShowPidCommand : public BuiltInCommand {
  public:
-    ShowPidCommand(const char* cmd_line);
+    ShowPidCommand(const char* cmd_line) : BuiltInCommand(cmd_line){}
     virtual ~ShowPidCommand() {}
     void execute() override;
 };
@@ -78,9 +82,12 @@ class JobsList;
 class QuitCommand : public BuiltInCommand {
     JobsList* jobs;
 public:
-    QuitCommand(const char* cmd_line, JobsList* jobs);
+    QuitCommand(const char* cmd_line, JobsList* jobs) : BuiltInCommand(cmd_line){
+        jobs = new JobsList(jobs);
+    }
     virtual ~QuitCommand() {}
     void execute() override;
+    JobsList* getJobsList(){return jobs;}
 };
     
 #include <vector>
@@ -98,7 +105,6 @@ public:
         ~JobEntry() = default;
         state getJobState(){return command_state;}
         bool IsStoppedStatus(){return command_state == Stopped;}
-        void killJob();
         int getPID(){ return PID;}
         int getJobID(){ return jobID;}
 };
