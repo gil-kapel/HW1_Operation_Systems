@@ -15,14 +15,22 @@ const string WHITESPACE = " \n\r\t\f\v";
 class SmallShell;
 
 class Command{
-    string cmd_line;
-public:
-    Command(const char* cmd_line): cmd_line(cmd_line); {}
+protected:
+    string _cmd_line;
+    const char* _args[COMMAND_MAX_ARGS];
+    int _num_of_args;
+    pid_t _pid;
+
+    Command(const char* cmd_line){}
     virtual ~Command();
     virtual void execute() = 0;
     // virtual void prepare();
     // virtual void cleanup();
-    std::string getCmdLine() { return cmd_line; }
+public:
+    pid_t getPid() { return _pid;}
+    int getNumOfArgs() { return _num_of_args;}
+    const char* getArgs(int i) { return _args[i];}
+    string getCmdLine() { return _cmd_line; }
     // TODO: Add your extra methods if needed
 };
 
@@ -33,8 +41,10 @@ public:
 };
 
 class ExternalCommand : public Command {
+    SmallShell* smash;
+    string name;
 public:
-    ExternalCommand(const char* cmd_line): Command(cmd_line){}
+    ExternalCommand(const char* cmd_line, SmallShell* s, string c): Command(cmd_line), name(c) { smash = s; }
     virtual ~ExternalCommand() {}
     void execute() override;
 };
@@ -99,7 +109,7 @@ public:
     class JobEntry{
         Command* cmd;
         int jobID;
-        int PID;
+        pid_t PID;
         bool isRunning;
         time_t jobTime;
     public:
@@ -107,7 +117,7 @@ public:
                  cmd(cmd), jobID(jobID), PID(PID), isRunning(isRunning){time(&jobTime);}
         ~JobEntry() = default;
         bool isJobRunning(){return isRunning;}
-        int getPID(){ return PID;}
+        pid_t getPID(){ return PID;}
         int getJobID(){ return jobID;}
         time_t getJobTime() {return jobTime};
         string getCmdLine(){return cmd->getCmdLine()};

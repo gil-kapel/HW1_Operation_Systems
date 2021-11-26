@@ -97,6 +97,17 @@ void ChangeDirCommand::execute() override{ //implementation//
   else if(chdir(cmd_s) == error_code_number) print error = perror();
 }
 
+void ExternalCommand::execute() override{
+  const string bash_command = "bash -c ";
+  smash.CreateCommand(bash_command + this.cmd_line);
+
+
+}
+
+
+
+
+
 void RedirectionCommand::execute() override{}
 
 void QuitCommand::execute() override{}
@@ -104,6 +115,8 @@ void QuitCommand::execute() override{}
 void JobsCommand::execute() override{}
 
 void KillCommand::execute() override{}
+
+
 
 void JobsList::addJob(Command* cmd, bool isStopped = false){
     if(isStopped) job_list.insert(JobList::JobEntry(job_list.size() + 1, getPidByCmd(cmd), Stopped)); // need to implement the getPidByCmd Function!!
@@ -158,7 +171,7 @@ JobEntry* JobsList::getLastStoppedJob(int *jobId){
   if(iter.IsStoppedStatus()) return &iter;
   else return nullptr;
 }
-  
+
 
 SmallShell::SmallShell() {
 // TODO: add your implementation
