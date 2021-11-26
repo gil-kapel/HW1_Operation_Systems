@@ -16,6 +16,7 @@
 #else
 #define FUNC_ENTRY()
 #define FUNC_EXIT()
+#define PATH_MAX 20
 #endif
 
 string _ltrim(const std::string& s) // returns the left part of the string (after the first whitespace)
@@ -76,25 +77,32 @@ void _removeBackgroundSign(char* cmd_line) {
 // TODO: Add your implementation for classes in Commands.h 
 
 void ShowPidCommand::execute() {
-    cout << "smash pid is " << /* getSmashPID() */ "" << endl;
+    cout << "smash pid is " << this->getPid(); << endl;
 }
 
 void GetCurrDirCommand::execute() {
-    cout << getcwd() << endl;
+    char dir_path[MAX_PATH];
+    cout << getcwd(dir_path, MAX_PATH); << endl;
  }
 
-void ChangeDirCommand::execute() { //implementation//
-  string cmd_s = _trim(string(cmd_line));
-  string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
-  char* dir[PATH_MAX];
-  string curr_path = getcwd(dir, PATH_MAX);
-  if(curr_path == nullptr);
-  else if(firstWord.compare("-") == 0){
-      if(last_cd_is_empty) cout << "smash error: cd: OLDPWD not set" << endl;
-      chdir(plastPwd);
+void ChangeDirCommand::execute() { 
+  string cmd_s = _trim(string(this->_cmd_line));
+  string path = cmd_s.substr(1, cmd_s.find_last_of(WHITESPACE));
+  string path_arr[PATH_MAX] ={nullptr};
+  stringstream ssin(path);
+  int args_count = _parseCommandLine(path, path_arr);
+  string curr_path = getcwd(curr_path, PATH_MAX);
+
+  if(path.compare("-") == 0){
+      if(plastPwd == nullptr) cout << "smash error: cd: OLDPWD not set" << endl;
+      else chdir(this->plastPwd);
       return;
   }
-  else if(chdir(cmd_s) == error_code_number) print error = perror();
+  else if(args_count > 1) cout << "smash error: cd: too many arguments" << endl; //won't happen
+  else if(chdir(path_arr[0]) == -1){
+    string error_msg = "smash error: " + "not finished - need to add the syscall type " + "failed";
+    perror(error_msg);
+  }
 }
 
 void ExternalCommand::execute(){
@@ -106,7 +114,6 @@ void ExternalCommand::execute(){
   }
   exit(0);
 }
-
 
 void RedirectionCommand::execute() {}
 
@@ -187,39 +194,42 @@ SmallShell::~SmallShell() {
 Command * SmallShell::CreateCommand(const char* cmd_line) {
 
   string cmd_s = _trim(string(cmd_line));
-  string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
-  int num_args = ???; 
-  if(red)
+  string cmd_array[COMMAND_MAX_ARGS] = {nullptr};
+  int args_num = _parseCommandLine(cmd_s, cmd_array);
+  if (cmd_array[0].compare("chprompt") == 0){
+    if(args_num == 1){
+      this->changePrompt("smash> ");
+    }
+    else this->changePrompt(cmd_s.find_last_not_of(WHITESPACE, 1) + "> ");
+  }
 
-  if (firstWord.compare("chprompt") == 0){}
-
-  else if (firstWord.compare("pwd") == 0){
+  else if (cmd_array[0].compare("pwd") == 0){
     return new GetCurrDirCommand(cmd_line);
   }
 
-  else if (firstWord.compare("showpid") == 0){
+  else if (cmd_array[0].compare("showpid") == 0){
     return new ShowPidCommand(cmd_line);
   }
 
-  else if (firstWord.compare("cd") == 0){
-      if (num_args > 1){
+  else if (cmd_array[0].compare("cd") == 0){
+      if (args_num > 1){
         cout << "smash error: cd: too many arguments" << endl;
       }
       else return new ChangeDirCommand(cmd_line);
   }
   
-  else if (firstWord.compare("jobs") == 0){}
+  else if (cmd_array[0].compare("jobs") == 0){}
 
-  else if (firstWord.compare("kill") == 0){}
+  else if (cmd_array[0].compare("kill") == 0){}
 
-  else if (firstWord.compare("fg") == 0){}
+  else if (cmd_array[0].compare("fg") == 0){}
 
-  else if (firstWord.compare("bg") == 0){}
+  else if (cmd_array[0].compare("bg") == 0){}
 
-  else if (firstWord.compare("quit") == 0){}
+  else if (cmd_array[0].compare("quit") == 0){}
 
   else {
-    return new ExternalCommand(cmd_line);
+      return new ExternalCommand(cmd_line, cmd_s.c_str());
   }
   return nullptr;
 }

@@ -9,8 +9,8 @@ using namespace std;
 #define COMMAND_ARGS_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
 #define SIM_MAX_PROCESSES (100)
+#define MAX_PATH (20)
     
-enum state {Foreground = 1, Background = 2, Stopped = 3};
 const string WHITESPACE = " \n\r\t\f\v";
 class SmallShell;
 
@@ -51,9 +51,11 @@ public:
 class PipeCommand : public Command {
     // TODO: Add your data members
  public:
-    PipeCommand(const char* cmd_line): Command(cmd_line){}
+    PipeCommand(const char* cmd_line): Command(cmd_line), op(op){}
     virtual ~PipeCommand() {}
     void execute() override;
+    //void prepare() override;
+    //void cleanup() override;
 };
 
 class RedirectionCommand : public Command {
@@ -118,8 +120,8 @@ public:
         bool isJobRunning(){return isRunning;}
         pid_t getPID(){ return PID;}
         int getJobID(){ return jobID;}
-        time_t getJobTime() {return jobTime};
-        string getCmdLine(){return cmd->getCmdLine()};
+        time_t getJobTime() {return jobTime; }
+        string getCmdLine(){return cmd->getCmdLine(); }
         bool activate();
         string getTime();
         Command* getCommand(){return cmd;}
@@ -127,9 +129,9 @@ public:
 private:
     vector<JobEntry> job_list;
 public:
-    JobsList(){job_list = vector<JobEntry>(SIM_MAX_PROCESSES)};
+    JobsList(): job_list(vector<JobEntry>(SIM_MAX_PROCESSES)){}
     ~JobsList() = default;
-    void addJob(Command* cmd, bool isStopped = false, int pid;
+    void addJob(Command* cmd, bool isStopped = false, int pid);
     void printJobsList();
     void killAllJobs(); 
     void removeFinishedJobs(); 
