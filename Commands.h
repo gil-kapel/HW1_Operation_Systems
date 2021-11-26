@@ -41,10 +41,9 @@ public:
 };
 
 class ExternalCommand : public Command {
-    SmallShell* smash;
-    string name;
+    string clean_cmd; //cmd without WHitespace signs
 public:
-    ExternalCommand(const char* cmd_line, SmallShell* s, string c): Command(cmd_line), name(c) { smash = s; }
+    ExternalCommand(const char* cmd_line, string clean_cmd): Command(cmd_line), clean_cmd(clean_cmd){}
     virtual ~ExternalCommand() {}
     void execute() override;
 };

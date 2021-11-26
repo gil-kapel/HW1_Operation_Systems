@@ -75,15 +75,15 @@ void _removeBackgroundSign(char* cmd_line) {
 
 // TODO: Add your implementation for classes in Commands.h 
 
-void ShowPidCommand::execute() override{
-    cout << "smash pid is " << /* getSmashPID() */ << endl;
+void ShowPidCommand::execute() {
+    cout << "smash pid is " << /* getSmashPID() */ "" << endl;
 }
 
-void GetCurrDirCommand::execute() override{
+void GetCurrDirCommand::execute() {
     cout << getcwd() << endl;
  }
 
-void ChangeDirCommand::execute() override{ //implementation//
+void ChangeDirCommand::execute() { //implementation//
   string cmd_s = _trim(string(cmd_line));
   string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
   char* dir[PATH_MAX];
@@ -97,24 +97,24 @@ void ChangeDirCommand::execute() override{ //implementation//
   else if(chdir(cmd_s) == error_code_number) print error = perror();
 }
 
-void ExternalCommand::execute() override{
-  const string bash_command = "bash -c ";
-  smash.CreateCommand(bash_command + this.cmd_line);
-
-
+void ExternalCommand::execute(){
+  char* argv[] = {"/bin/bash", "-c", this->clean_cmd.c_str(), nullptr};
+  int res = execv("/bin/bash", argv);
+  if(res == -1){
+      perror("smash error: execv failed");
+      exit(-1);
+  }
+  exit(0);
 }
 
 
+void RedirectionCommand::execute() {}
 
+void QuitCommand::execute() {}
 
+void JobsCommand::execute() {}
 
-void RedirectionCommand::execute() override{}
-
-void QuitCommand::execute() override{}
-
-void JobsCommand::execute() override{}
-
-void KillCommand::execute() override{}
+void KillCommand::execute() {}
 
 
 
@@ -127,7 +127,7 @@ auto printJob = [](const JobList::JobEntry& job){
   if(job.IsStoppedStatus()){
     cout << "";   //implementation
     }
-  }
+  };
 
 void JobsList::printJobsList(){
     std::for_each(job_list.begin(), job_list.end(), printJob);
@@ -207,7 +207,7 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
       }
       else return new ChangeDirCommand(cmd_line);
   }
-  .....
+  
   else if (firstWord.compare("jobs") == 0){}
 
   else if (firstWord.compare("kill") == 0){}
