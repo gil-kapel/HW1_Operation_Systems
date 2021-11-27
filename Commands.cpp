@@ -75,6 +75,23 @@ void _removeBackgroundSign(char* cmd_line) {
 }
 
 // TODO: Add your implementation for classes in Commands.h 
+int findRedirectionCommand(const char* cmd_line){ /* return the index of the first > sign, will return str::npos if there is not > sign*/
+    const string str(cmd_line);
+    return str.find_first_of('>')];
+}
+
+bool isAppendRedirection(const char* cmd_line){
+    const string str(cmd_line);
+    return (str.find_first_of('>>')] < string::npos;
+}
+int findPipeCommand(const char* cmd_line){ /* return the index of the first > sign, will return str::npos if there is not > sign*/
+    const string str(cmd_line);
+    return str.find_first_of('|')];
+}
+
+bool isErrorPipe const char* cmd_line){
+    const string str(cmd_line);
+    return (str.find_first_of('|&')] < string::npos;
 
 void ShowPidCommand::execute() {
     cout << "smash pid is " << this->getPid(); << endl;
@@ -196,6 +213,27 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
   string cmd_s = _trim(string(cmd_line));
   string cmd_array[COMMAND_MAX_ARGS] = {nullptr};
   int args_num = _parseCommandLine(cmd_s, cmd_array);
+  int index = findRedirectionCommand(cmd_s.c_str());
+  if(re_index < string::npos){
+      string s_cmd = cmd_s.substr(0, re_index - 1);
+      string file_path = cmd_s.substr(re_index + 1);
+      if(isAppendRedirection(cmd_s.c_str())){
+          file_path = cmd_s.substr(re_index + 2);
+          return new RedirectionCommand(cmd_line, file_path, s_cmd, true);
+      }
+      else return new RedirectionCommand(cmd_line, file_path, s_cmd, false);
+  }
+  index = findPipeCommand(cmd_s.c_str());
+  if(re_index < string::npos){
+      string fisrt_cmd = cmd_s.substr(0, re_index - 1);
+      string second_cmd = cmd_s.substr(re_index + 1);
+      if(isErrorPipe(cmd_s.c_str())){
+          second_cmd = cmd_s.substr(re_index + 2);
+          return new PipeCommand(cmd_line, fisrt_cmd, second_cmd, true);
+      }
+      else return new PipeCommand(cmd_line, fisrt_cmd, second_cmd, false);
+  }
+
   if (cmd_array[0].compare("chprompt") == 0){
     if(args_num == 1){
       this->changePrompt("smash> ");

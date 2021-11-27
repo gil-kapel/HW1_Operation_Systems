@@ -50,8 +50,12 @@ public:
 
 class PipeCommand : public Command {
     // TODO: Add your data members
+    string first_cmd;
+    string sec_cmd;
+    bool isError;
  public:
-    PipeCommand(const char* cmd_line): Command(cmd_line), op(op){}
+    PipeCommand(const char* cmd_line, string first_cmd, string sec_cmd, bool isError):
+                            Command(cmd_line), first_cmd(first_cmd), sec_cmd(sec_cmd), isError(isError){}
     virtual ~PipeCommand() {}
     void execute() override;
     //void prepare() override;
@@ -60,8 +64,12 @@ class PipeCommand : public Command {
 
 class RedirectionCommand : public Command {
  // TODO: Add your data members
+    string file_path;
+    string s_cmd;
+    bool isAppended;
  public:
-    explicit RedirectionCommand(const char* cmd_line);
+    explicit RedirectionCommand(const char* cmd_line, string file_path, string s_cmd, bool isAppended): 
+                                            Command(cmd_line), file_path(file_path), s_cmd(s_cmd), isAppended(isAppended){}
     virtual ~RedirectionCommand() {}
     void execute() override;
     //void prepare() override;
