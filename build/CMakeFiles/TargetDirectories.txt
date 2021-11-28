@@ -1,3 +1,0 @@
-D:/Limud/Third_year/Operation_systems/HW1/build/CMakeFiles/smash.dir
-D:/Limud/Third_year/Operation_systems/HW1/build/CMakeFiles/edit_cache.dir
-D:/Limud/Third_year/Operation_systems/HW1/build/CMakeFiles/rebuild_cache.dir

@@ -3,47 +3,59 @@
 
 #include <vector>
 #include <string>
-#include <algorithm>
+#include <unistd.h>
+#include <map>
+#include <sys/types.h>
+#include <fcntl.h>
+// #include <sys/wait.h>
+#include <signal.h>
 
-using namespace std;
+using std::map;
+using std::string;
+
 #define COMMAND_ARGS_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
-#define SIM_MAX_PROCESSES (100)
 #define MAX_PATH (20)
     
 const string WHITESPACE = " \n\r\t\f\v";
 class SmallShell;
 
-class Command{
+enum status{
+    stopped, runningBG
+}; /* why not bool? */
+
+class Command {
 protected:
+// TODO: Add your data members
     string _cmd_line;
     const char* _args[COMMAND_MAX_ARGS];
     int _num_of_args;
     pid_t _pid;
 
-    Command(const char* cmd_line){}
+    Command(const char* cmd_line);
+    //virtual void prepare();
+    //virtual void cleanup();
+    // TODO: Add your extra methods if needed
+public:
     virtual ~Command();
     virtual void execute() = 0;
-    // virtual void prepare();
-    // virtual void cleanup();
-public:
-    pid_t getPid() { return _pid;}
-    int getNumOfArgs() { return _num_of_args;}
-    const char* getArgs(int i) { return _args[i];}
-    string getCmdLine() { return _cmd_line; }
-    // TODO: Add your extra methods if needed
+    pid_t getPid() const {return _pid;}
+    int getNumOfArgs() const{return _num_of_args;}
+    const char* getArgs(int i)const{ return _args[i];}
+    string getCmdLine() const {return _cmd_line;}
+    bool isNumber(string n); // check if the string represent number
+
 };
 
-class BuiltInCommand : public Command{
+class BuiltInCommand : public Command {
 public:
-    BuiltInCommand(const char* cmd_line): Command(cmd_line){}
+    BuiltInCommand(const char* cmd_line);
     virtual ~BuiltInCommand() {}
 };
 
 class ExternalCommand : public Command {
-    string clean_cmd; //cmd without WHitespace signs
 public:
-    ExternalCommand(const char* cmd_line, string clean_cmd): Command(cmd_line), clean_cmd(clean_cmd){}
+    ExternalCommand(const char* cmd_line, string clean_cmd): Command(cmd_line){}
     virtual ~ExternalCommand() {}
     void execute() override;
 };
@@ -52,14 +64,13 @@ class PipeCommand : public Command {
     // TODO: Add your data members
     string first_cmd;
     string sec_cmd;
-    bool isError;
+    bool is_std_error;
+    SmallShell& smash;
  public:
-    PipeCommand(const char* cmd_line, string first_cmd, string sec_cmd, bool isError):
-                            Command(cmd_line), first_cmd(first_cmd), sec_cmd(sec_cmd), isError(isError){}
+    PipeCommand(const char* cmd_line, string first_cmd, string sec_cmd, bool is_std_error, SmallShell& s):
+                            Command(cmd_line), first_cmd(first_cmd), sec_cmd(sec_cmd), is_std_error(is_std_error), smash(s){}
     virtual ~PipeCommand() {}
     void execute() override;
-    //void prepare() override;
-    //void cleanup() override;
 };
 
 class RedirectionCommand : public Command {
@@ -76,149 +87,137 @@ class RedirectionCommand : public Command {
     //void cleanup() override;
 };
 
-class ChangeDirCommand : public BuiltInCommand {
-    string* plastPwd;
-public:
-    ChangeDirCommand(const char* cmd_line, char** plastPwd): BuiltInCommand(cmd_line){
-        this->plastPwd = new std::string(plastPwd);
-    }
-    virtual ~ChangeDirCommand() {}
-    void execute() override;
-    string* getPlastPwd(){return plastPwd;}
-};
-
-class GetCurrDirCommand : public BuiltInCommand {
- public:
-    GetCurrDirCommand(const char* cmd_line): BuiltInCommand(cmd_line){}
-    virtual ~GetCurrDirCommand() {}
-    void execute() override;
-};
-
-class ShowPidCommand : public BuiltInCommand {
- public:
-    ShowPidCommand(const char* cmd_line) : BuiltInCommand(cmd_line){}
-    virtual ~ShowPidCommand() {}
-    void execute() override;
-};
-
-class JobsList;
-class QuitCommand : public BuiltInCommand {
-    JobsList* jobs;
-public:
-    QuitCommand(const char* cmd_line, JobsList* jobs) : BuiltInCommand(cmd_line){
-        jobs = new JobsList(jobs);
-    }
-    virtual ~QuitCommand() {}
-    void execute() override;
-    JobsList* getJobsList(){return jobs;}
-};
-
-class JobsList {
-public:
-    class JobEntry{
-        Command* cmd;
-        int jobID;
-        pid_t PID;
-        bool isRunning;
-        time_t jobTime;
-    public:
-        JobEntry(Command* cmd = nullptr, int jobID = -1, int PID = -1, bool isRunning = false): 
-                 cmd(cmd), jobID(jobID), PID(PID), isRunning(isRunning){time(&jobTime);}
-        ~JobEntry() = default;
-        bool isJobRunning(){return isRunning;}
-        pid_t getPID(){ return PID;}
-        int getJobID(){ return jobID;}
-        time_t getJobTime() {return jobTime; }
-        string getCmdLine(){return cmd->getCmdLine(); }
-        bool activate();
-        string getTime();
-        Command* getCommand(){return cmd;}
-};
-private:
-    vector<JobEntry> job_list;
-public:
-    JobsList(): job_list(vector<JobEntry>(SIM_MAX_PROCESSES)){}
-    ~JobsList() = default;
-    void addJob(Command* cmd, bool isStopped = false, int pid);
-    void printJobsList();
-    void killAllJobs(); 
-    void removeFinishedJobs(); 
-    JobEntry* getJobById(int jobId);
-    void removeJobById(int jobId); 
-    JobEntry* getLastJob(int* lastJobId); 
-    JobEntry* getLastStoppedJob(int *jobId); 
-    int getListSize(){return job_list.size();}
-    int getPid_ByJobId(int jobId);
-    int getJobId_ByPid(int pid);
-    int findMaxValue();
-    int findMaxValueOfStopped();
-    bool activateJob(JobEntry* job);
-    bool checkIfJobExist(int pid);
-    // TODO: Add extra methods or modify exisitng ones as needed
-};
-
-class JobsCommand : public BuiltInCommand {
-JobsList* jobs;
-public:
-    JobsCommand(const char* cmd_line, JobsList* jobs);
-    virtual ~JobsCommand() {}
-    void execute() override;
-};
-
-class KillCommand : public BuiltInCommand {
-    JobsList* jobs;
-public:
-    KillCommand(const char* cmd_line, JobsList* jobs);
-    virtual ~KillCommand() {}
-    void execute() override;
-};
-
-class ForegroundCommand : public BuiltInCommand {
-    JobsList* jobs;
-public:
-    ForegroundCommand(const char* cmd_line, JobsList* jobs);
-    virtual ~ForegroundCommand() {}
-    void execute() override;
-};
-
-class BackgroundCommand : public BuiltInCommand {
-    JobsList* jobs;
-public:
-    BackgroundCommand(const char* cmd_line, JobsList* jobs);
-    virtual ~BackgroundCommand() {}
-    void execute() override;
-};
-
 class HeadCommand : public BuiltInCommand {
- public:
+public:
     HeadCommand(const char* cmd_line);
     virtual ~HeadCommand() {}
     void execute() override;
 };
 
-class SmallShell {
-    JobsList* jobs;
-    SmallShell();
-    string prompt;
-    string previos_dir;
-    int PID;
-    Command* cmd;
-    // int fgPid;
-    // int fgJobId;
+/*********************************************************************************************************************/
+/*****************************************JOB LIST*******************************************************************/
+
+class JobEntry {
+    int _job_id;
+    Command* _command;
+    time_t _start_time;
+    status _status; // status == 1 -> stopped other running in the bg
 public:
-    std::list<TimedJob> timedList;
-    TimedJob checkWhoTimedOut();
-    int getNewAlarmTime();
-    JobsList* getJobList();
-    std::list<TimedJob>* getTimedList();
-    void changePrompt(const std::string& otherPrompt);
-    std::string getPrompt();
-    void changeLastDir(std::string dir);
-    std::string getLastDir();
+    JobEntry(int job_id, Command* command, time_t t, status s=runningBG) : _job_id(job_id), _command(command), _start_time(t),_status(s) {};
+    JobEntry(const JobEntry& job) { _job_id = job._job_id, _command = job._command, _start_time = job._start_time,_status = job._status;}
+    ~JobEntry() = default;
+    int getJobId() const {return _job_id;}
+    string getCmdLine() const {return _command->getCmdLine();}
+    double getSecondElapsed() const {return difftime(time(nullptr), _start_time);}
+    status getStatus() const{ return _status;}
+    void setStatus(status newStatus) {_status = newStatus;}
+    Command* getCommand() const{return _command;}
+};
+
+class JobsList {
+    map<int, JobEntry> _jobs = {};
+//    int _num_of_jobs = 1;
+    int _max_id_job = 0;
+public:
+    JobsList() = default;
+    ~JobsList() = default;
+    void addJob(Command* cmd, bool isStopped = false);
+    void printJobsList();
+    void killAllJobs();
+    void removeFinishedJobs();
+    void removeJobById(int jobId){ _jobs.erase(jobId); }
+    JobEntry * getJobById(int jobId);
+    int getMaxId() { _max_id_job++; return _max_id_job; }
+    map<int, JobEntry>& getJobs() {return _jobs;}
+    int getLastJob();
+    int getLastStoppedJob();
+};
+
+
+/*****************************************************************/
+/***********************BUILD-IN COMMANDS*************************/
+
+class ChPromptCommand : public BuiltInCommand {
+public:
+    explicit ChPromptCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {};
+    ~ChPromptCommand() override = default;
+    void execute() override;
+};
+
+class ShowPidCommand : public BuiltInCommand {
+public:
+    explicit ShowPidCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {};
+    ~ShowPidCommand() override = default;
+    void execute() override;
+};
+
+class GetCurrDirCommand : public BuiltInCommand {
+public:
+    explicit GetCurrDirCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {};
+    ~GetCurrDirCommand() override = default;
+    void execute() override;
+};
+
+class ChangeDirCommand : public BuiltInCommand {
+public:
+    explicit ChangeDirCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {};
+    ~ChangeDirCommand() override = default;
+    void execute() override;
+};
+
+class JobsCommand : public BuiltInCommand {
+public:
+    explicit JobsCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {};
+    ~JobsCommand() override = default;
+    void execute() override;
+};
+
+class KillCommand : public BuiltInCommand {
+public:
+    explicit KillCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {};
+    ~KillCommand() override = default;
+    void execute() override;
+};
+
+class ForegroundCommand : public BuiltInCommand {
+    // TODO: Add your data members
+public:
+    explicit ForegroundCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {};
+    ~ForegroundCommand() override = default;
+    void execute() override;
+};
+
+class BackgroundCommand : public BuiltInCommand {
+    // TODO: Add your data members
+public:
+    explicit BackgroundCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {};
+    ~BackgroundCommand() override = default;
+    void execute() override;
+};
+
+class QuitCommand : public BuiltInCommand {
+// TODO: Add your data members public:
+    explicit QuitCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {};
+    ~QuitCommand() override = default;
+    void execute() override;
+};
+
+/*********************************************************************************************************************/
+/*******************************************SMALL SHELL**************************************************************/
+
+class SmallShell {
+private:
+    // TODO: Add your data members
+    string _name = "smash";
+    JobsList _jobs_list;
+    int _pid;
+    SmallShell();
+    string _last_path = "";
+    string _curr_path = "";
+public:
     Command *CreateCommand(const char* cmd_line);
     SmallShell(SmallShell const&)      = delete; // disable copy ctor
     void operator=(SmallShell const&)  = delete; // disable = operator
-    ~SmallShell() = default;
     static SmallShell& getInstance() // make SmallShell singleton
     {
         static SmallShell instance; // Guaranteed to be destroyed.
@@ -227,7 +226,16 @@ public:
     }
     ~SmallShell();
     void executeCommand(const char* cmd_line);
-    // TODO: add extra methods as needed
+    // getter's and setter's
+    void setName(const string& new_name){_name = new_name;}
+    string getName() const {return _name;}
+    int getPid() const {return _pid;}
+    string getLastPath() const {return _last_path;}
+    string getCurrPath() const {return _curr_path;}
+    void setLastPath(string newLastPath){_last_path = newLastPath;}
+    void setCurrPath(string newCurrPath){_curr_path = newCurrPath;}
+    JobsList& getJobsList() {return _jobs_list;}
+
 };
 
 #endif //SMASH_COMMAND_H_
