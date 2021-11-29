@@ -3,7 +3,7 @@
 #include <iostream>
 #include <vector>
 #include <sstream>
-// #include <sys/wait.h>
+#include <sys/wait.h>
 #include <iomanip>
 #include "Commands.h"
 
@@ -132,7 +132,7 @@ SmallShell::~SmallShell() {
 Command * SmallShell::CreateCommand(const char* cmd_line) {
     string cmd_s = _trim(string(cmd_line));
     char* cmd_array[COMMAND_MAX_ARGS] = {nullptr};
-    
+    int arg_num = _parseCommandLine(cmd_s.c_str(), cmd_array);
     /*Redirection and pipe commands handle*/
 
     unsigned re_index = findRedirectionCommand(cmd_s.c_str());
@@ -201,9 +201,8 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
 void SmallShell::executeCommand(const char *cmd_line) {
     // TODO: Add your implementation here
     // for example:
-    Command* cmd = CreateCommand(cmd_line);
-
     string cmd_s = _trim(string(cmd_line));
+    Command* cmd = CreateCommand(cmd_line);
     if(cmd == nullptr){ /* not built-in nor special commands */
         int ext_pid = fork();
         if(ext_pid == -1) ErrorHandling("fork");
@@ -212,7 +211,10 @@ void SmallShell::executeCommand(const char *cmd_line) {
             cmd->execute();
             delete cmd;
         }
-        else if(_isBackgroundComamnd(cmd_line)) return;
+        else if(_isBackgroundComamnd(cmd_line)){
+            this->_jobs_list.addJob(cmd);  
+            return;
+        }
         else waitpid(ext_pid, nullptr, 0);
         return;
     }
@@ -315,9 +317,9 @@ JobEntry* JobsList::getJobById(int jobId){
 /**************************************BUILD-IN COMMAND IMPLEMENTATION************************************************/
 /*********************************************************************************************************************/
 
-Command::Command(const char* cmd_line)_cmd_line(cmd_line){
+Command::Command(const char* cmd_line):_cmd_line(cmd_line){
         _num_of_args = _parseCommandLine(cmd_line, _args);
-        _pid = 1; 
+        _pid = getpid(); 
     }
 
 void ChPromptCommand::execute() {

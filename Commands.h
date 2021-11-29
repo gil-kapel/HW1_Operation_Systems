@@ -7,7 +7,7 @@
 #include <map>
 #include <sys/types.h>
 #include <fcntl.h>
-#include <sys/wait.h>
+// #include <sys/wait.h>
 #include <signal.h>
 
 using std::map;
@@ -15,6 +15,7 @@ using std::string;
 
 #define COMMAND_ARGS_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
+#define MAX_PROCCESS_SIMULTAINOUSLY (100)
 #define MAX_PATH (20)
     
 const string WHITESPACE = " \n\r\t\f\v";
