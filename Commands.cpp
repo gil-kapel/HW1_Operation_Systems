@@ -79,7 +79,7 @@ void _removeBackgroundSign(char* cmd_line) {
 /*********************************************************************************************************************/
 // TODO: Add your implementation for classes in Commands.h 
 
-bool isNumber(const string &str)
+bool Command::isNumber(const string &str)
 {
     return str.find_first_not_of("0123456789") == string::npos;
 }
@@ -314,6 +314,11 @@ JobEntry* JobsList::getJobById(int jobId){
 /*********************************************************************************************************************/
 /**************************************BUILD-IN COMMAND IMPLEMENTATION************************************************/
 /*********************************************************************************************************************/
+
+Command::Command(const char* cmd_line)_cmd_line(cmd_line){
+        _num_of_args = _parseCommandLine(cmd_line, _args);
+        _pid = 1; 
+    }
 
 void ChPromptCommand::execute() {
     if(this->getNumOfArgs() == 0){

@@ -7,7 +7,7 @@
 #include <map>
 #include <sys/types.h>
 #include <fcntl.h>
-// #include <sys/wait.h>
+#include <sys/wait.h>
 #include <signal.h>
 
 using std::map;
@@ -28,7 +28,7 @@ class Command {
 protected:
 // TODO: Add your data members
     string _cmd_line;
-    const char* _args[COMMAND_MAX_ARGS];
+    char* _args[COMMAND_MAX_ARGS];
     int _num_of_args;
     pid_t _pid;
 
@@ -37,13 +37,13 @@ protected:
     //virtual void cleanup();
     // TODO: Add your extra methods if needed
 public:
-    virtual ~Command();
+    virtual ~Command() = default;
     virtual void execute() = 0;
     pid_t getPid() const {return _pid;}
     int getNumOfArgs() const{return _num_of_args;}
     const char* getArgs(int i)const{ return _args[i];}
     string getCmdLine() const {return _cmd_line;}
-    bool isNumber(string n); // check if the string represent number
+    bool isNumber(const string &str); // check if the string represent number
 
 };
 
@@ -55,8 +55,8 @@ public:
 
 class ExternalCommand : public Command {
 public:
-    ExternalCommand(const char* cmd_line, string clean_cmd): Command(cmd_line){}
-    virtual ~ExternalCommand() {}
+    explicit ExternalCommand(const char* cmd_line, string clean_cmd): Command(cmd_line){}
+    virtual ~ExternalCommand() = default;
     void execute() override;
 };
 
@@ -69,7 +69,7 @@ class PipeCommand : public Command {
  public:
     PipeCommand(const char* cmd_line, string first_cmd, string sec_cmd, bool is_std_error, SmallShell& s):
                             Command(cmd_line), first_cmd(first_cmd), sec_cmd(sec_cmd), is_std_error(is_std_error), smash(s){}
-    virtual ~PipeCommand() {}
+    virtual ~PipeCommand() = default;
     void execute() override;
 };
 
@@ -81,7 +81,7 @@ class RedirectionCommand : public Command {
  public:
     explicit RedirectionCommand(const char* cmd_line, string file_path, string s_cmd, bool isAppended): 
                                             Command(cmd_line), file_path(file_path), s_cmd(s_cmd), isAppended(isAppended){}
-    virtual ~RedirectionCommand() {}
+    virtual ~RedirectionCommand() = default;
     void execute() override;
     //void prepare() override;
     //void cleanup() override;
@@ -103,7 +103,7 @@ class JobEntry {
     time_t _start_time;
     status _status; // status == 1 -> stopped other running in the bg
 public:
-    JobEntry(int job_id, Command* command, time_t t, status s=runningBG) : _job_id(job_id), _command(command), _start_time(t),_status(s) {};
+    JobEntry(int job_id = 0, Command* command = nullptr, time_t t = 0, status s=runningBG) : _job_id(job_id), _command(command), _start_time(t),_status(s) {};
     JobEntry(const JobEntry& job) { _job_id = job._job_id, _command = job._command, _start_time = job._start_time,_status = job._status;}
     ~JobEntry() = default;
     int getJobId() const {return _job_id;}
