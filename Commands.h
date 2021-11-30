@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <map>
 #include <sys/types.h>
-#include <sys/wait.h>
+// #include <sys/wait.h>
 #include <signal.h>
 #include <fcntl.h>
 
@@ -132,6 +132,7 @@ public:
     map<int, JobEntry>& getJobs() {return _jobs;}
     int getLastJob();
     int getLastStoppedJob();
+    int getJobByPid(int pid); // need implementation
 };
 
 
@@ -216,6 +217,7 @@ private:
     SmallShell();
     string _last_path = "";
     string _curr_path = "";
+    Command* _fgCmd;
 public:
     Command *CreateCommand(const char* cmd_line);
     SmallShell(SmallShell const&)      = delete; // disable copy ctor
@@ -234,10 +236,19 @@ public:
     int getPid() const {return _pid;}
     string getLastPath() const {return _last_path;}
     string getCurrPath() const {return _curr_path;}
+    Command* getFgCmd() const {return _fgCmd;}
     void setLastPath(string newLastPath){_last_path = newLastPath;}
     void setCurrPath(string newCurrPath){_curr_path = newCurrPath;}
+    void setFgCmd(Command* Cmd) {_fgCmd = Cmd;}
     JobsList& getJobsList() {return _jobs_list;}
 
 };
+
+void ErrorHandling(string syscall, bool to_exit = false){ /* General error message and exit -1 for syscall faliure*/
+    string error_msg = "smash error: " + syscall + " failed";
+    perror(error_msg.c_str());
+    if(to_exit) exit(-1);
+    else return;
+}
 
 #endif //SMASH_COMMAND_H_

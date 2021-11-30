@@ -75,11 +75,6 @@ void _removeBackgroundSign(char* cmd_line) {
     cmd_line[str.find_last_not_of(WHITESPACE, idx) + 1] = 0;
 }
 
-void ErrorHandling(string syscall){ /* General error message and exit -1 for syscall faliure*/
-    string error_msg = "smash error: " + syscall + " failed";
-    perror(error_msg.c_str());
-    exit(-1);
-}
 
 /*********************************************************************************************************************/
 /***************************Pipe and Redirection classification functions*********************************************/
@@ -126,6 +121,7 @@ void SmallShell::executeCommand(const char *cmd_line) {
     Command* cmd = CreateCommand(cmd_line); // external commands must fork
     if(cmd == nullptr) return;
     if(_isBackgroundComamnd(cmd_line)) smash.getJobsList().addJob(cmd);
+    else smash.setFgCmd(cmd);
     smash.getJobsList().removeFinishedJobs();
     cmd->execute();
     delete cmd;
