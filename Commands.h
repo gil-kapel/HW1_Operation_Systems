@@ -6,9 +6,11 @@
 #include <unistd.h>
 #include <map>
 #include <sys/types.h>
-// #include <sys/wait.h>
+#include <sys/wait.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <ctime>
+#include <fstream>
 
 
 using std::map;
@@ -24,7 +26,7 @@ const string WHITESPACE = " \n\r\t\f\v";
 class SmallShell;
 
 enum status{
-    stopped, runningBG
+    stopped, runningBG, runningFG
 };
 
 class Command {
@@ -74,6 +76,7 @@ class PipeCommand : public Command {
     virtual ~PipeCommand() = default;
     void execute() override;
 };
+
 class RedirectionCommand : public Command {
  // TODO: Add your data members
     string file_path;
@@ -90,7 +93,7 @@ class RedirectionCommand : public Command {
 
 class HeadCommand : public BuiltInCommand {
 public:
-    HeadCommand(const char* cmd_line);
+    explicit HeadCommand(const char* cmd_line): BuiltInCommand(cmd_line) {};
     virtual ~HeadCommand() {}
     void execute() override;
 };
@@ -104,7 +107,7 @@ class JobEntry {
     time_t _start_time;
     status _status; // status == 1 -> stopped other running in the bg
 public:
-    JobEntry(int job_id = 0, Command* command = nullptr, time_t t = 0, status s=runningBG) : _job_id(job_id), _command(command), _start_time(t),_status(s) {};
+    JobEntry(int job_id = 0, Command* command = nullptr, time_t t = time(0), status s=runningBG) : _job_id(job_id), _command(command), _start_time(t),_status(s) {};
     JobEntry(const JobEntry& job) { _job_id = job._job_id, _command = job._command, _start_time = job._start_time,_status = job._status;}
     ~JobEntry() = default;
     int getJobId() const {return _job_id;}
@@ -122,7 +125,7 @@ class JobsList {
 public:
     JobsList() = default;
     ~JobsList() = default;
-    void addJob(Command* cmd_line, bool isStopped = false);
+    void addJob(Command* cmd_line, status status_before = stopped, bool isStopped = false);
     void printJobsList();
     void killAllJobs();
     void removeFinishedJobs();
@@ -218,6 +221,7 @@ private:
     string _last_path = "";
     string _curr_path = "";
     Command* _fgCmd;
+    int fgJobId;
 public:
     Command *CreateCommand(const char* cmd_line);
     SmallShell(SmallShell const&)      = delete; // disable copy ctor
@@ -237,9 +241,11 @@ public:
     string getLastPath() const {return _last_path;}
     string getCurrPath() const {return _curr_path;}
     Command* getFgCmd() const {return _fgCmd;}
+    int getFgJobId() const {return fgJobId;}
     void setLastPath(string newLastPath){_last_path = newLastPath;}
     void setCurrPath(string newCurrPath){_curr_path = newCurrPath;}
     void setFgCmd(Command* Cmd) {_fgCmd = Cmd;}
+    void setFgJobId(int job_id) { fgJobId = job_id; }
     JobsList& getJobsList() {return _jobs_list;}
 
 };

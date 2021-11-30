@@ -120,8 +120,7 @@ SmallShell::~SmallShell() {
 void SmallShell::executeCommand(const char *cmd_line) {
     Command* cmd = CreateCommand(cmd_line); // external commands must fork
     if(cmd == nullptr) return;
-    if(_isBackgroundComamnd(cmd_line)) smash.getJobsList().addJob(cmd);
-    else smash.setFgCmd(cmd);
+    if(_isBackgroundComamnd(cmd_line)) smash.getJobsList().addJob(cmd, runningBG);
     smash.getJobsList().removeFinishedJobs();
     cmd->execute();
     delete cmd;
@@ -330,12 +329,18 @@ void RedirectionCommand::execute(){
 /****************************************JOBS LIST CLASS IMPLEMENTATION***********************************************/
 /********************************************************************************************************************/
 
-void JobsList::addJob(Command *cmd, bool isStopped) {
+void JobsList::addJob(Command *cmd, status status_before, bool isStopped) {
     removeFinishedJobs();
     //todo if job exist
     status s = (isStopped) ? stopped : runningBG;
-    int new_id_job = getMaxId();
+    if(status_before == runningFG){
+        int old_job_id = smash.getFgJobId();
+        _jobs[old_job_id] = JobEntry(old_job_id, cmd, time(nullptr), s);
+    }
+    else{
+        int new_id_job = getMaxId();
     _jobs[new_id_job] = JobEntry(new_id_job, cmd, time(nullptr), s);
+    }
 }
 
 void JobsList::printJobsList() {
@@ -544,14 +549,16 @@ void ForegroundCommand::execute() {
     else if(_num_of_args == 0){
         job_id_to_fg = smash.getJobsList().getLastJob();
     }
-
-    pid_t pid_to_fg = smash.getJobsList().getJobs()[job_id_to_fg].getCommand()->getPid();
-    cout << smash.getJobsList().getJobs()[job_id_to_fg].getCmdLine() << " : " << pid_to_fg << endl;
+    JobEntry job = smash.getJobsList().getJobs()[job_id_to_fg];
+    pid_t pid_to_fg = job.getCommand()->getPid();
+    cout << job.getCmdLine() << " : " << pid_to_fg << endl;
 
     if(kill(pid_to_fg, SIGCONT) == -1) {
         perror("smash error: kill failed");
         return;
     }
+    smash.setFgCmd(job.getCommand());
+    smash.setFgJobId(job_id_to_fg);
     smash.getJobsList().removeJobById(job_id_to_fg);
     if(waitpid(pid_to_fg, NULL, WUNTRACED) == -1) { /// todo - check about the WNOHANG option
         perror("smash error: waitpid failed");
@@ -605,5 +612,31 @@ void QuitCommand::execute() {
         smash.getJobsList().killAllJobs();
         cout << "Linux-shell:";
         // todo delete smash ?
+    }
+}
+#include <fstream>
+
+void HeadCommand::execute() {
+    if(_num_of_args == 1){
+        cerr<<"smash error: head: not enough arguments"<<endl;
+        return;
+    }
+    if(_num_of_args == 2){
+        char buff[10];
+        if(openat(3, _args[1], O_RDONLY) == -1) ErrorHandling("open");
+        if(write(3, buff, 10)) ErrorHandling("write");
+        if(read(1, buff, 10)) ErrorHandling("read");
+    }
+    if(_num_of_args == 3){
+        int buffer_size = stoi(_args[1]);
+        char buff[buffer_size];
+        if(openat(3, _args[2], O_RDONLY) == -1) ErrorHandling("open");
+        if(read(3, buff, buffer_size)) ErrorHandling("read");
+        if(write(1, buff, buffer_size)) ErrorHandling("write");
+
+    }
+    else{
+        cerr<<"smash error: head: too many arguments"<<endl;
+        return;
     }
 }
