@@ -112,8 +112,10 @@ bool isErrorPipe(const char* cmd_line){
 
 SmallShell::SmallShell(){
     _pid = getpid();
-    _curr_path = getcwd(const_cast<char*>(_curr_path.c_str()), MAX_PATH);
-    _last_path = _curr_path;
+    char dir[MAX_PATH];
+    getcwd(dir,MAX_PATH);
+    _curr_path = dir;
+    _last_path = dir;
 }
 
 SmallShell::~SmallShell() {
@@ -122,12 +124,8 @@ SmallShell::~SmallShell() {
 
 void SmallShell::executeCommand(const char *cmd_line) {
     Command* cmd = CreateCommand(cmd_line); // external commands must fork
-    if(!cmd){
-        return;
-    }
-    if(_isBackgroundComamnd(cmd_line)){
-        smash.getJobsList().addJob(cmd);
-    }
+    if(cmd == nullptr) return;
+    if(_isBackgroundComamnd(cmd_line)) smash.getJobsList().addJob(cmd);
     smash.getJobsList().removeFinishedJobs();
     cmd->execute();
     delete cmd;
@@ -138,10 +136,13 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
     char* args_array[COMMAND_MAX_ARGS];
     int arg_num = _parseCommandLine(cmd_line, args_array);
     string firstWord;
-    char* tempWord;
+    char tempWord[MAX_COMMAND_LENGTH];
     if( args_array[0] != NULL ) {
-        firstWord = firstWord.substr(0, firstWord.find_first_of(" \n"));
-        tempWord = const_cast<char*>(firstWord.c_str());
+        firstWord = cmd_s.substr(0, cmd_s.find_first_of(" "));
+        strcpy(tempWord, firstWord.c_str());
+        _removeBackgroundSign(tempWord);
+        firstWord = tempWord;
+
     }
     else {
         for(int i = 0; i < arg_num; i++) {
@@ -153,8 +154,6 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
     for(int i = 0; i < arg_num; i++) {
         free(args_array[i]);
     }
-    _removeBackgroundSign(tempWord);
-    firstWord = tempWord;
 
     /*Built in commands handle*/
     if (firstWord.compare("chprompt") == 0){
@@ -198,7 +197,7 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
     /*Redirection and pipe commands handle*/
 
     unsigned re_index = findRedirectionCommand(cmd_s.c_str());
-    if(re_index != string::npos && re_index > 0){
+    if(re_index <= MAX_COMMAND_LENGTH && re_index > 0){
         string first_cmd = cmd_s.substr(0, re_index - 1);
         string file_path = cmd_s.substr(re_index + 1, string::npos);
         if(isAppendRedirection(cmd_s.c_str())){
@@ -208,7 +207,7 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
         else return new RedirectionCommand(cmd_line, file_path, first_cmd, false);
     }
     unsigned pipe_index = findPipeCommand(cmd_s.c_str());
-    if(pipe_index < string::npos && pipe_index > 0){
+    if(pipe_index <= MAX_COMMAND_LENGTH && pipe_index > 0){
         string fisrt_cmd = cmd_s.substr(0, pipe_index - 1);
         string second_cmd = cmd_s.substr(pipe_index + 1);
         if(isErrorPipe(cmd_s.c_str())){
@@ -235,7 +234,7 @@ bool Command::isNumber(const string &str){
 
 BuiltInCommand::BuiltInCommand(const char *cmd_line) : Command(cmd_line) {
     string cmd_s = _trim(string(cmd_line));
-    _num_of_args = _parseCommandLine(cmd_s.c_str(), _args);
+    _num_of_args = _parseCommandLine(cmd_s.c_str(), _args) - 1;
 }
 
 BuiltInCommand::~BuiltInCommand(){
@@ -250,7 +249,7 @@ void ExternalCommand::execute() {
     string cmd_s = _trim(string(_cmd_line));
     char cmd_c[MAX_COMMAND_LENGTH];
     strcpy(cmd_c, cmd_s.c_str());
-    char* argv[] = {bash_cmd, flag, cmd_c};
+    char* argv[] = {bash_cmd, flag, cmd_c, nullptr};
 
     pid_t ext_pid = fork();
     if(ext_pid == -1) ErrorHandling("fork");
@@ -274,6 +273,7 @@ void PipeCommand::execute(){
     if(is_std_error) index = 2;
     Command* command;
     int first_pid = fork();
+    int sec_pid = -1;
     if(first_pid == -1) ErrorHandling("fork");
     if(first_pid == 0){
         if(setpgrp() == -1) ErrorHandling("setpgrp");
@@ -283,7 +283,7 @@ void PipeCommand::execute(){
         command = smash.CreateCommand(first_cmd.c_str());
     }
     else{
-        int sec_pid = fork();
+        sec_pid = fork();
         if(sec_pid == -1) ErrorHandling("fork");
         if(sec_pid == 0){
             if(setpgrp() == -1) ErrorHandling("setpgrp");
@@ -420,21 +420,21 @@ void ChPromptCommand::execute() {
         smash.setName("smash");
     }
     else{
-        smash.setName(this->getArgs(0));
+        smash.setName(this->getArgs(1));
     }
 }
 
 void ShowPidCommand::execute() {
-    cout << "smash pid is" << smash.getPid() << endl;
+    cout << "smash pid is " << smash.getPid() << endl;
 }
 
 void GetCurrDirCommand::execute() { //todo why not to use in cuurent path of smash class
-    char cwd[COMMAND_MAX_ARGS];
-    if(getcwd(cwd, sizeof(cwd)) != NULL){
+    char cwd[MAX_PATH];
+    if(getcwd(cwd, MAX_PATH) != NULL){
         cout << string(cwd) << endl;
     }
     else{
-        perror("smash error: getcwd failed");
+        perror("smash error: getwd failed");
     }
 }
 
@@ -443,16 +443,23 @@ void ChangeDirCommand::execute() {
        cerr << "smash error: cd: too many arguments" << endl;
        return;
     }
-    if(_args[0] == "-" && smash.getLastPath() == ""){
-        cerr << "smash error: cd: OLDPWD not set" << endl;
-        return;
+    if(_args[1] == "-"){
+        if(smash.getLastPath() == ""){
+            cerr << "smash error: cd: OLDPWD not set" << endl;
+            return;
+        }
+        else{
+            smash.setLastPath(smash.getCurrPath());
+            smash.setCurrPath(smash.getLastPath());
+            return;
+        }
     }
-    if(chdir(*_args) == -1) {
+    if(chdir(_args[1]) == -1) {
         perror("smash error: chdir failed");
         return;
     }
     smash.setLastPath(smash.getCurrPath());
-    smash.setCurrPath(string(*_args));
+    smash.setCurrPath(string(_args[1]));
 }
 
 void JobsCommand::execute() {
@@ -465,7 +472,7 @@ void KillCommand::execute() {
         return;
     }
     // check arg 1
-    string arg1 = _args[0];
+    string arg1 = _args[1];
     if(arg1[0] != '-'){
         cerr << "smash error: kill: invalid arguments" << endl;
         return;
@@ -527,7 +534,7 @@ void ForegroundCommand::execute() {
     int job_id_to_fg;
     if(_num_of_args == 1) {
         // check arg
-        string str_job_id = _args[0];
+        string str_job_id = _args[1];
         if (!isNumber(str_job_id)) {
             cerr << "smash error: fg: invalid arguments" << endl;
             return;
@@ -564,7 +571,7 @@ void BackgroundCommand::execute() {
     int job_id_to_running;
     if(_num_of_args == 1) {
         // check arg
-        string str_job_id = _args[0];
+        string str_job_id = _args[1];
         if (!isNumber(str_job_id)) {
             cerr << "smash error: bg: invalid arguments" << endl;
             return;
@@ -596,7 +603,7 @@ void BackgroundCommand::execute() {
 }
 
 void QuitCommand::execute() {
-    if (_num_of_args == 1 && (strcmp(_args[0], "kill") == 0)) {
+    if (_num_of_args == 1 && (strcmp(_args[1], "kill") == 0)) {
         int size = smash.getJobsList().getJobs().size();
         cout << "smash: sending SIGKILL signal to " << size << " jobs:" << endl;
         smash.getJobsList().killAllJobs();
