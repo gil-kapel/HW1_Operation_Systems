@@ -255,7 +255,7 @@ void ExternalCommand::execute() {
     pid_t ext_pid = fork();
     if(ext_pid == -1) ErrorHandling("fork");
     if(ext_pid == 0){ //child process
-        setpgrp();
+        if(setpgrp() == -1) ErrorHandling("setpgrp");
         if(execv(bash_cmd, argv) == -1 ) ErrorHandling("execv");
     }
     // father process
@@ -275,17 +275,19 @@ void PipeCommand::execute(){
     Command* command;
     int first_pid = fork();
     if(first_pid == -1) ErrorHandling("fork");
-    int sec_pid = fork();
-    if(sec_pid == -1) ErrorHandling("fork");
     if(first_pid == 0){
-        dup2(fd[1], index);
+        if(setpgrp() == -1) ErrorHandling("setpgrp");
+        if(dup2(fd[1], index) == -1) ErrorHandling("dup2");
         if(close(fd[0]) == -1) ErrorHandling("close");
         if(close(fd[1]) == -1) ErrorHandling("close");
         command = smash.CreateCommand(first_cmd.c_str());
     }
     else{
+        int sec_pid = fork();
+        if(sec_pid == -1) ErrorHandling("fork");
         if(sec_pid == 0){
-            dup2(fd[0], 0);
+            if(setpgrp() == -1) ErrorHandling("setpgrp");
+            if(dup2(fd[0], 0) == -1) ErrorHandling("dup2");
             if(close(fd[0]) == -1) ErrorHandling("close");
             if(close(fd[1]) == -1) ErrorHandling("close");
             command = smash.CreateCommand(sec_cmd.c_str());
@@ -308,7 +310,9 @@ void RedirectionCommand::execute(){
     int pid = fork();
     if(pid == -1) ErrorHandling("fork");
     if(pid == 0){
-        dup(1);
+        if(setpgrp() == -1) ErrorHandling("setpgrp");
+        int std = dup(1);
+        if(std == -1) ErrorHandling("dup");
         if(close(1) == -1) ErrorHandling("close");
         if(isAppended){
             if(open(file_path.c_str(), O_RDWR | O_CREAT | O_APPEND, 0666) == -1) ErrorHandling("open");
@@ -317,8 +321,12 @@ void RedirectionCommand::execute(){
         command = smash.CreateCommand(this->s_cmd.c_str());
         command->execute();
         delete command;
+        if (close(1) == -1) ErrorHandling("close");
+        if (dup(std) == -1) ErrorHandling("dup");
+        if (close(std) == -1) ErrorHandling("close");
         exit(0);
     }
+
     wait(nullptr);
 }
 
@@ -355,7 +363,6 @@ void JobsList::killAllJobs() {
             perror("smash error: kill failed");
         }
         cout << pid_to_kill << ": " << iter.second.getCmdLine() << endl;
-        delete iter.second.getCommand();
     }
     _jobs.clear();
 }
@@ -370,7 +377,6 @@ void JobsList::removeFinishedJobs() {
         }
         if(temp == to_find){
             _jobs.erase(iter.first);
-            delete iter.second.getCommand();
         }
 
     }
