@@ -6,7 +6,6 @@
 #include <unistd.h>
 #include <map>
 #include <sys/types.h>
-#include <fcntl.h>
 // #include <sys/wait.h>
 #include <signal.h>
 
@@ -17,72 +16,63 @@ using std::string;
 #define COMMAND_MAX_ARGS (20)
 #define MAX_PROCCESS_SIMULTAINOUSLY (100)
 #define MAX_PATH (20)
-    
+#define MAX_COMMAND_LENGTH (80)
+
 const string WHITESPACE = " \n\r\t\f\v";
 class SmallShell;
 
 enum status{
     stopped, runningBG
-}; /* why not bool? */
+};
 
 class Command {
 protected:
-// TODO: Add your data members
     string _cmd_line;
-    char* _args[COMMAND_MAX_ARGS];
-    int _num_of_args;
     pid_t _pid;
-
-    Command(const char* cmd_line);
+public:
+    explicit Command(const char* cmd_line);
+    virtual ~Command() = default;
+    virtual void execute() = 0;
     //virtual void prepare();
     //virtual void cleanup();
     // TODO: Add your extra methods if needed
-public:
-    virtual ~Command() = default;
-    virtual void execute() = 0;
     pid_t getPid() const {return _pid;}
-    int getNumOfArgs() const{return _num_of_args;}
-    const char* getArgs(int i)const{ return _args[i];}
     string getCmdLine() const {return _cmd_line;}
-    bool isNumber(const string &str); // check if the string represent number
+    static bool isNumber(const string &str); // check if the string represent number
 
 };
 
 class BuiltInCommand : public Command {
+protected:
+    char* _args[COMMAND_MAX_ARGS];
+    int _num_of_args;
 public:
-    BuiltInCommand(const char* cmd_line);
-    virtual ~BuiltInCommand() {}
+    explicit BuiltInCommand(const char* cmd_line);
+    ~BuiltInCommand() override;
+    int getNumOfArgs() const{ return _num_of_args;}
+    const char* getArgs(int i) const{ return _args[i];}
 };
 
 class ExternalCommand : public Command {
 public:
-    explicit ExternalCommand(const char* cmd_line, string clean_cmd): Command(cmd_line){}
-    virtual ~ExternalCommand() = default;
+    explicit ExternalCommand(const char* cmd_line) : Command(cmd_line) {};
+    ~ExternalCommand() override = default;
     void execute() override;
 };
 
 class PipeCommand : public Command {
     // TODO: Add your data members
-    string first_cmd;
-    string sec_cmd;
-    bool is_std_error;
-    SmallShell& smash;
- public:
-    PipeCommand(const char* cmd_line, string first_cmd, string sec_cmd, bool is_std_error, SmallShell& s):
-                            Command(cmd_line), first_cmd(first_cmd), sec_cmd(sec_cmd), is_std_error(is_std_error), smash(s){}
-    virtual ~PipeCommand() = default;
+public:
+    PipeCommand(const char* cmd_line);
+    virtual ~PipeCommand() {}
     void execute() override;
 };
 
 class RedirectionCommand : public Command {
- // TODO: Add your data members
-    string file_path;
-    string s_cmd;
-    bool isAppended;
- public:
-    explicit RedirectionCommand(const char* cmd_line, string file_path, string s_cmd, bool isAppended): 
-                                            Command(cmd_line), file_path(file_path), s_cmd(s_cmd), isAppended(isAppended){}
-    virtual ~RedirectionCommand() = default;
+    // TODO: Add your data members
+public:
+    explicit RedirectionCommand(const char* cmd_line);
+    virtual ~RedirectionCommand() {}
     void execute() override;
     //void prepare() override;
     //void cleanup() override;
@@ -122,7 +112,7 @@ class JobsList {
 public:
     JobsList() = default;
     ~JobsList() = default;
-    void addJob(Command* cmd, bool isStopped = false);
+    void addJob(Command* cmd_line, bool isStopped = false);
     void printJobsList();
     void killAllJobs();
     void removeFinishedJobs();
@@ -141,14 +131,14 @@ public:
 class ChPromptCommand : public BuiltInCommand {
 public:
     explicit ChPromptCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {};
-    ~ChPromptCommand() override = default;
+    ~ChPromptCommand() override = default;;
     void execute() override;
 };
 
 class ShowPidCommand : public BuiltInCommand {
 public:
     explicit ShowPidCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {};
-    ~ShowPidCommand() override = default;
+    ~ShowPidCommand() override = default;;
     void execute() override;
 };
 
@@ -198,6 +188,7 @@ public:
 
 class QuitCommand : public BuiltInCommand {
 // TODO: Add your data members public:
+public:
     explicit QuitCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {};
     ~QuitCommand() override = default;
     void execute() override;

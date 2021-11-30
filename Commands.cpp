@@ -3,7 +3,6 @@
 #include <iostream>
 #include <vector>
 #include <sstream>
-#include <sys/wait.h>
 #include <iomanip>
 #include "Commands.h"
 
@@ -76,172 +75,168 @@ void _removeBackgroundSign(char* cmd_line) {
     cmd_line[str.find_last_not_of(WHITESPACE, idx) + 1] = 0;
 }
 
-/*********************************************************************************************************************/
-// TODO: Add your implementation for classes in Commands.h 
-
-bool Command::isNumber(const string &str)
-{
-    return str.find_first_not_of("0123456789") == string::npos;
-}
-
 void ErrorHandling(string syscall){ /* General error message and exit -1 for syscall faliure*/
-    string error_msg = "smash error:" + syscall + "failed";
+    string error_msg = "smash error: " + syscall + " failed";
     perror(error_msg.c_str());
     exit(-1);
 }
 
-/*********************************************************************************************************************/
-/***************************Pipe and Redirection classification functions**********************************************/
 
-int findRedirectionCommand(const char* cmd_line){ /* return the index of the first > sign,
- will return str::npos if there isn't any > sign*/
-    const string str(cmd_line);
-    return str.find_first_of(">");
-}
+/**********************************************************************************************************************/
+/*****************************************SmallShell IMPLEMENTATION****************************************************/
+/**********************************************************************************************************************/
 
-bool isAppendRedirection(const char* cmd_line){
-    const string str(cmd_line);
-    return (str.find_first_of(">>") < string::npos);
-}
-
-int findPipeCommand(const char* cmd_line){ /* return the index of the first | sign, 
-will return str::npos if there isn't any | sign */
-    const string str(cmd_line);
-    return str.find_first_of("|");
-}
-
-bool isErrorPipe(const char* cmd_line){
-    const string str(cmd_line);
-    return (str.find_first_of("|&") < string::npos);
-}
-
-/*********************************************************************************************************************/
-/********************************Small Shell implementation***********************************************************/
-
-SmallShell::SmallShell() {
-// TODO: add your implementation
+SmallShell::SmallShell(){
+    _pid = getpid();
+    _curr_path = getcwd(const_cast<char*>(_curr_path.c_str()), MAX_PATH);
+    _last_path = _curr_path;
 }
 
 SmallShell::~SmallShell() {
-// TODO: add your implementation
-}
-
-/**
-* Creates and returns a pointer to Command class which matches the given command line (cmd_line)
-*/
-Command * SmallShell::CreateCommand(const char* cmd_line) {
-    string cmd_s = _trim(string(cmd_line));
-    char* cmd_array[COMMAND_MAX_ARGS] = {nullptr};
-    int arg_num = _parseCommandLine(cmd_s.c_str(), cmd_array);
-    /*Redirection and pipe commands handle*/
-
-    unsigned re_index = findRedirectionCommand(cmd_s.c_str());
-    if(re_index < string::npos){
-        string first_cmd = cmd_s.substr(0, re_index - 1);
-        string file_path = cmd_s.substr(re_index + 1);
-        if(isAppendRedirection(cmd_s.c_str())){
-            file_path = cmd_s.substr(re_index + 2);
-            return new RedirectionCommand(cmd_line, file_path, first_cmd, true);
-        }
-        else return new RedirectionCommand(cmd_line, file_path, first_cmd, false);
-    }
-    unsigned pipe_index = findPipeCommand(cmd_s.c_str());
-    if(pipe_index < string::npos){
-        string fisrt_cmd = cmd_s.substr(0, pipe_index - 1);
-        string second_cmd = cmd_s.substr(pipe_index + 1);
-        if(isErrorPipe(cmd_s.c_str())){
-            second_cmd = cmd_s.substr(pipe_index + 2);
-            return new PipeCommand(cmd_line, fisrt_cmd, second_cmd, true, smash);
-        }
-        else return new PipeCommand(cmd_line, fisrt_cmd, second_cmd, false, smash);
-    }
-    
-    /*Built in commands handle*/
-
-    if (strcmp(cmd_array[0], "chprompt") == 0){
-        return new ChPromptCommand(cmd_line);
-    }
-
-    else if (strcmp(cmd_array[0], "pwd") == 0){
-        return new GetCurrDirCommand(cmd_line);
-    }
-
-    else if (strcmp(cmd_array[0],"showpid") == 0){
-        return new ShowPidCommand(cmd_line);
-    }
-
-    else if (strcmp(cmd_array[0],"cd") == 0){
-        return new ChangeDirCommand(cmd_line);
-    }
-    
-    else if (strcmp(cmd_array[0], "jobs") == 0){
-        return new JobsCommand(cmd_line);
-    }
-
-    else if (strcmp(cmd_array[0], "kill") == 0){
-        return new KillCommand(cmd_line);
-    }
-
-    else if (strcmp(cmd_array[0], "fg") == 0){
-        return new ForegroundCommand(cmd_line);
-    }
-
-    else if (strcmp(cmd_array[0], "bg") == 0){
-        return new BackgroundCommand(cmd_line);
-    }
-
-    // else if (strcmp(cmd_array[0], "quit") == 0){
-    //     return new QuitCommand(cmd_line);
-    // }
-
-    // not redirection, pipe or built in commands - can be external, timeout.....
-    return nullptr;
+    _jobs_list.killAllJobs();
 }
 
 void SmallShell::executeCommand(const char *cmd_line) {
-    // TODO: Add your implementation here
-    // for example:
-    string cmd_s = _trim(string(cmd_line));
-    Command* cmd = CreateCommand(cmd_line);
-    if(cmd == nullptr){ /* not built-in nor special commands */
-        int ext_pid = fork();
-        if(ext_pid == -1) ErrorHandling("fork");
-        if(ext_pid == 0){
-            Command* cmd = new ExternalCommand(cmd_line, cmd_s.c_str());
-            cmd->execute();
-            delete cmd;
-        }
-        else if(_isBackgroundComamnd(cmd_line)){
-            this->_jobs_list.addJob(cmd);  
-            return;
-        }
-        else waitpid(ext_pid, nullptr, 0);
+    Command* cmd = CreateCommand(cmd_line); // external commands must fork
+    if(!cmd){
         return;
     }
-
+    if(_isBackgroundComamnd(cmd_line)){
+        smash.getJobsList().addJob(cmd);
+    }
+    smash.getJobsList().removeFinishedJobs();
     cmd->execute();
+    delete cmd;
+}
 
-    // Please note that you must fork smash process for some commands (e.g., external commands....)
+Command * SmallShell::CreateCommand(const char* cmd_line) {
+    string cmd_s = _trim(string(cmd_line));
+    char* args_array[COMMAND_MAX_ARGS];
+    int arg_num = _parseCommandLine(cmd_line, args_array);
+    string firstWord;
+    char* tempWord;
+    if( args_array[0] != NULL ) {
+        firstWord = firstWord.substr(0, firstWord.find_first_of(" \n"));
+        tempWord = const_cast<char*>(firstWord.c_str());
+    }
+    else {
+        for(int i = 0; i < arg_num; i++) {
+            free(args_array[i]);
+        }
+        return nullptr;
+    }
+    // free
+    for(int i = 0; i < arg_num; i++) {
+        free(args_array[i]);
+    }
+    _removeBackgroundSign(tempWord);
+    firstWord = tempWord;
+
+    /*Built in commands handle*/
+    if (firstWord.compare("chprompt") == 0){
+        return new ChPromptCommand(cmd_line);
+    }
+
+    else if (firstWord.compare("pwd") == 0) {
+        return new GetCurrDirCommand(cmd_line);
+    }
+
+    else if (firstWord.compare("showpid") == 0) {
+        return new ShowPidCommand(cmd_line);
+    }
+
+    else if (firstWord.compare("cd") == 0) {
+        return new ChangeDirCommand(cmd_line);
+    }
+
+    else if (firstWord.compare("jobs") == 0) {
+        return new JobsCommand(cmd_line);
+    }
+
+    else if (firstWord.compare("kill") == 0) {
+        return new KillCommand(cmd_line);
+    }
+
+    else if (firstWord.compare("fg") == 0) {
+        return new ForegroundCommand(cmd_line);
+    }
+
+    else if (firstWord.compare("bg") == 0) {
+        return new BackgroundCommand(cmd_line);
+    }
+    
+    if(firstWord == "quit") {
+        return new QuitCommand(cmd_line);
+    }
+
+    /********special commands*******/
+
+    if(cmd_s.find_first_of('>') > 0 && cmd_s.find_first_of('>') != string::npos) {
+        return new RedirectionCommand(cmd_line);
+    }
+    
+    if(cmd_s.find_first_of('|') > 0 && cmd_s.find_first_of('|') != string::npos) {
+        return new PipeCommand(cmd_line);
+    }
+
+    return new ExternalCommand(cmd_line);
+}
+
+/**********************************************************************************************************************/
+/*****************************************Command IMPLEMENTATION****************************************************/
+/**********************************************************************************************************************/
+
+Command::Command(const char* cmd_line):_cmd_line(cmd_line){
+    _pid = getpid();
+}
+
+bool Command::isNumber(const string &str){
+    return str.find_first_not_of("0123456789") == string::npos;
+}
+
+BuiltInCommand::BuiltInCommand(const char *cmd_line) : Command(cmd_line) {
+    string cmd_s = _trim(string(cmd_line));
+    _num_of_args = _parseCommandLine(cmd_s.c_str(), _args);
+}
+
+BuiltInCommand::~BuiltInCommand(){
+    for(int i = 0; i < _num_of_args; i++) {
+        free(_args[i]);
+    }
+}
+
+void ExternalCommand::execute() {
+    char bash_cmd[] = {"/bin/bash"};
+    char flag[] = {"-c"};
+    string cmd_s = _trim(string(_cmd_line));
+    char cmd_c[MAX_COMMAND_LENGTH];
+    strcpy(cmd_c, cmd_s.c_str());
+    char* argv[] = {bash_cmd, flag, cmd_c};
+
+    pid_t ext_pid = fork();
+    if(ext_pid == -1) ErrorHandling("fork");
+    if(ext_pid == 0){ //child process
+        setpgrp();
+        if(execv(bash_cmd, argv) == -1 ) ErrorHandling("execv");
+    }
+    // father process
+    else if(_isBackgroundComamnd(cmd_s.c_str())) return;
+    else {
+        int ret = waitpid(ext_pid, nullptr, 0);
+        if(ret == -1) ErrorHandling("waitpid");
+    }
 }
 
 /*********************************************************************************************************************/
 /****************************************JOBS LIST CLASS IMPLEMENTATION***********************************************/
 /********************************************************************************************************************/
 
-// void JobsList::addJob(Command *cmd, bool isStopped) {
-//     removeFinishedJobs();
-//     //todo if job exist
-//     status s = (isStopped) ? stopped : runningBG;
-//     int new_id_job = getMaxId();
-//     _jobs[new_id_job] = JobEntry(new_id_job, cmd, time(nullptr), s);
-// }
-
 void JobsList::addJob(Command *cmd, bool isStopped) {
     removeFinishedJobs();
     //todo if job exist
     status s = (isStopped) ? stopped : runningBG;
     int new_id_job = getMaxId();
-    _jobs.insert({new_id_job, JobEntry(new_id_job, cmd, time(nullptr), s)});
+    _jobs[new_id_job] = JobEntry(new_id_job, cmd, time(nullptr), s);
 }
 
 void JobsList::printJobsList() {
@@ -265,6 +260,7 @@ void JobsList::killAllJobs() {
             perror("smash error: kill failed");
         }
         cout << pid_to_kill << ": " << iter.second.getCmdLine() << endl;
+        delete iter.second.getCommand();
     }
     _jobs.clear();
 }
@@ -279,6 +275,7 @@ void JobsList::removeFinishedJobs() {
         }
         if(temp == to_find){
             _jobs.erase(iter.first);
+            delete iter.second.getCommand();
         }
 
     }
@@ -308,7 +305,7 @@ int JobsList::getLastStoppedJob() {
     return last_id_job;
 }
 
-JobEntry* JobsList::getJobById(int jobId){
+JobEntry *JobsList::getJobById(int jobId){
     if(_jobs.find(jobId) == _jobs.end()) return nullptr;
     return &_jobs[jobId];
 }
@@ -316,11 +313,6 @@ JobEntry* JobsList::getJobById(int jobId){
 /*********************************************************************************************************************/
 /**************************************BUILD-IN COMMAND IMPLEMENTATION************************************************/
 /*********************************************************************************************************************/
-
-Command::Command(const char* cmd_line):_cmd_line(cmd_line){
-        _num_of_args = _parseCommandLine(cmd_line, _args);
-        _pid = getpid(); 
-    }
 
 void ChPromptCommand::execute() {
     if(this->getNumOfArgs() == 0){
@@ -340,7 +332,9 @@ void GetCurrDirCommand::execute() { //todo why not to use in cuurent path of sma
     if(getcwd(cwd, sizeof(cwd)) != NULL){
         cout << string(cwd) << endl;
     }
-    else ErrorHandling("getcwd");
+    else{
+        perror("smash error: getcwd failed");
+    }
 }
 
 void ChangeDirCommand::execute() {
@@ -352,7 +346,6 @@ void ChangeDirCommand::execute() {
         cerr << "smash error: cd: OLDPWD not set" << endl;
         return;
     }
-    /*************The '-' sign needs to restore the last path to the curr path ***************/
     if(chdir(*_args) == -1) {
         perror("smash error: chdir failed");
         return;
@@ -507,75 +500,6 @@ void QuitCommand::execute() {
         cout << "smash: sending SIGKILL signal to " << size << " jobs:" << endl;
         smash.getJobsList().killAllJobs();
         cout << "Linux-shell:";
+        // todo delete smash ?
     }
-}
-
-/*********************************************************************************************************************/
-/**********************EXTERNAL, PIPE AND REDIRECTION COMMANDS IMPLEMENTATION*****************************************/
-/*********************************************************************************************************************/
-
-void ExternalCommand::execute(){
-    char bash_cmd[] = {"/bin/bash"};
-    char flag[] = {"-c"};
-    string cmd_s = _trim(string(_cmd_line));
-    char* argv[] = {bash_cmd, flag, const_cast<char*>(cmd_s.c_str()), nullptr};
-    int res = execv(bash_cmd, argv);
-    if(res == -1) ErrorHandling("execv");
-    exit(0);
-}
-
-void PipeCommand::execute(){
-    int fd[2];
-    int ret = pipe(fd);
-    if(ret == -1) ErrorHandling("pipe");
-    int index = 1;
-    if(is_std_error) index = 2;
-    Command* command;
-    int first_pid = fork();
-    if(first_pid == -1) ErrorHandling("fork");
-    int sec_pid = fork();
-    if(sec_pid == -1) ErrorHandling("fork");
-    if(first_pid == 0){
-        dup2(fd[1], index);
-        if(close(fd[0]) == -1) ErrorHandling("close");
-        if(close(fd[1]) == -1) ErrorHandling("close");
-        command = smash.CreateCommand(first_cmd.c_str());
-    }
-    else{
-        if(sec_pid == 0){
-            dup2(fd[0], 0);
-            if(close(fd[0]) == -1) ErrorHandling("close");
-            if(close(fd[1]) == -1) ErrorHandling("close");
-            command = smash.CreateCommand(sec_cmd.c_str());
-        }
-    }
-    if(first_pid == 0 || sec_pid == 0) {
-        if(command == nullptr) exit(-1);
-        command->execute();
-        delete command;
-        exit(0);
-    }
-    if(close(fd[0]) == -1) ErrorHandling("close");
-    if(close(fd[1]) == -1) ErrorHandling("close");
-    waitpid(first_pid, nullptr, 0);
-    waitpid(sec_pid, nullptr, 0);
-}
-
-void RedirectionCommand::execute(){
-    Command* command;
-    int pid = fork();
-    if(pid == -1) ErrorHandling("fork");
-    if(pid == 0){
-        dup(1);
-        if(close(1) == -1) ErrorHandling("close");
-        if(isAppended){
-            if(open(file_path.c_str(), O_RDWR | O_CREAT | O_APPEND, 0666) == -1) ErrorHandling("open");
-        }
-        else if(open(file_path.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0666) == -1) ErrorHandling("open");
-        command = smash.CreateCommand(this->s_cmd.c_str());
-        command->execute();
-        delete command;
-        exit(0);
-    }
-    wait(nullptr);
 }
