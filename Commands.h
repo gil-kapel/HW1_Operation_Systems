@@ -6,8 +6,10 @@
 #include <unistd.h>
 #include <map>
 #include <sys/types.h>
-// #include <sys/wait.h>
+#include <sys/wait.h>
 #include <signal.h>
+#include <fcntl.h>
+
 
 using std::map;
 using std::string;
@@ -62,17 +64,25 @@ public:
 
 class PipeCommand : public Command {
     // TODO: Add your data members
-public:
-    PipeCommand(const char* cmd_line);
-    virtual ~PipeCommand() {}
+    string first_cmd;
+    string sec_cmd;
+    bool is_std_error;
+    SmallShell& smash;
+ public:
+    PipeCommand(const char* cmd_line, string first_cmd, string sec_cmd, bool is_std_error, SmallShell& s):
+                            Command(cmd_line), first_cmd(first_cmd), sec_cmd(sec_cmd), is_std_error(is_std_error), smash(s){}
+    virtual ~PipeCommand() = default;
     void execute() override;
 };
-
 class RedirectionCommand : public Command {
-    // TODO: Add your data members
-public:
-    explicit RedirectionCommand(const char* cmd_line);
-    virtual ~RedirectionCommand() {}
+ // TODO: Add your data members
+    string file_path;
+    string s_cmd;
+    bool isAppended;
+ public:
+    explicit RedirectionCommand(const char* cmd_line, string file_path, string s_cmd, bool isAppended): 
+                                            Command(cmd_line), file_path(file_path), s_cmd(s_cmd), isAppended(isAppended){}
+    virtual ~RedirectionCommand() = default;
     void execute() override;
     //void prepare() override;
     //void cleanup() override;

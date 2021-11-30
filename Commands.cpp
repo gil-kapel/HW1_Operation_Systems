@@ -81,6 +81,30 @@ void ErrorHandling(string syscall){ /* General error message and exit -1 for sys
     exit(-1);
 }
 
+/*********************************************************************************************************************/
+/***************************Pipe and Redirection classification functions*********************************************/
+
+int findRedirectionCommand(const char* cmd_line){ /* return the index of the first > sign,
+ will return str::npos if there isn't any > sign*/
+    const string str(cmd_line);
+    return str.find_first_of(">");
+}
+
+bool isAppendRedirection(const char* cmd_line){
+    const string str(cmd_line);
+    return (str.find_first_of(">>") < string::npos);
+}
+
+int findPipeCommand(const char* cmd_line){ /* return the index of the first | sign, 
+will return str::npos if there isn't any | sign */
+    const string str(cmd_line);
+    return str.find_first_of("|");
+}
+
+bool isErrorPipe(const char* cmd_line){
+    const string str(cmd_line);
+    return (str.find_first_of("|&") < string::npos);
+}
 
 /**********************************************************************************************************************/
 /*****************************************SmallShell IMPLEMENTATION****************************************************/
@@ -171,12 +195,27 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
 
     /********special commands*******/
 
-    if(cmd_s.find_first_of('>') > 0 && cmd_s.find_first_of('>') != string::npos) {
-        return new RedirectionCommand(cmd_line);
+    /*Redirection and pipe commands handle*/
+
+    unsigned re_index = findRedirectionCommand(cmd_s.c_str());
+    if(re_index != string::npos && re_index > 0){
+        string first_cmd = cmd_s.substr(0, re_index - 1);
+        string file_path = cmd_s.substr(re_index + 1, string::npos);
+        if(isAppendRedirection(cmd_s.c_str())){
+            file_path = cmd_s.substr(re_index + 2);
+            return new RedirectionCommand(cmd_line, file_path, first_cmd, true);
+        }
+        else return new RedirectionCommand(cmd_line, file_path, first_cmd, false);
     }
-    
-    if(cmd_s.find_first_of('|') > 0 && cmd_s.find_first_of('|') != string::npos) {
-        return new PipeCommand(cmd_line);
+    unsigned pipe_index = findPipeCommand(cmd_s.c_str());
+    if(pipe_index < string::npos && pipe_index > 0){
+        string fisrt_cmd = cmd_s.substr(0, pipe_index - 1);
+        string second_cmd = cmd_s.substr(pipe_index + 1);
+        if(isErrorPipe(cmd_s.c_str())){
+            second_cmd = cmd_s.substr(pipe_index + 2);
+            return new PipeCommand(cmd_line, fisrt_cmd, second_cmd, true, smash);
+        }
+        else return new PipeCommand(cmd_line, fisrt_cmd, second_cmd, false, smash);
     }
 
     return new ExternalCommand(cmd_line);
@@ -225,6 +264,62 @@ void ExternalCommand::execute() {
         int ret = waitpid(ext_pid, nullptr, 0);
         if(ret == -1) ErrorHandling("waitpid");
     }
+}
+
+void PipeCommand::execute(){
+    int fd[2];
+    int ret = pipe(fd);
+    if(ret == -1) ErrorHandling("pipe");
+    int index = 1;
+    if(is_std_error) index = 2;
+    Command* command;
+    int first_pid = fork();
+    if(first_pid == -1) ErrorHandling("fork");
+    int sec_pid = fork();
+    if(sec_pid == -1) ErrorHandling("fork");
+    if(first_pid == 0){
+        dup2(fd[1], index);
+        if(close(fd[0]) == -1) ErrorHandling("close");
+        if(close(fd[1]) == -1) ErrorHandling("close");
+        command = smash.CreateCommand(first_cmd.c_str());
+    }
+    else{
+        if(sec_pid == 0){
+            dup2(fd[0], 0);
+            if(close(fd[0]) == -1) ErrorHandling("close");
+            if(close(fd[1]) == -1) ErrorHandling("close");
+            command = smash.CreateCommand(sec_cmd.c_str());
+        }
+    }
+    if(first_pid == 0 || sec_pid == 0) {
+        if(command == nullptr) exit(-1);
+        command->execute();
+        delete command;
+        exit(0);
+    }
+    if(close(fd[0]) == -1) ErrorHandling("close");
+    if(close(fd[1]) == -1) ErrorHandling("close");
+    waitpid(first_pid, nullptr, 0);
+    waitpid(sec_pid, nullptr, 0);
+}
+
+void RedirectionCommand::execute(){
+    Command* command;
+    int pid = fork();
+    if(pid == -1) ErrorHandling("fork");
+    if(pid == 0){
+        dup(1);
+        if(close(1) == -1) ErrorHandling("close");
+        if(isAppended){
+            if(open(file_path.c_str(), O_RDWR | O_CREAT | O_APPEND, 0666) == -1) ErrorHandling("open");
+        }
+        else if(open(file_path.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0666) == -1) ErrorHandling("open");
+        command = smash.CreateCommand(this->s_cmd.c_str());
+        command->execute();
+        delete command;
+        exit(0);
+    }
+    wait(nullptr);
 }
 
 /*********************************************************************************************************************/
