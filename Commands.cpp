@@ -6,8 +6,9 @@
 #include <iomanip>
 #include "Commands.h"
 
-SmallShell& smash = SmallShell::getInstance();
 using namespace std;
+
+SmallShell& smash = SmallShell::getInstance();
 
 #if 0
 #define FUNC_ENTRY()  \
@@ -62,7 +63,7 @@ void _removeBackgroundSign(char* cmd_line) {
     // find last character other than spaces
     unsigned int idx = str.find_last_not_of(WHITESPACE);
     // if all characters are spaces then return
-    if (idx == string::npos) {
+    if (idx > MAX_COMMAND_LENGTH) {
         return;
     }
     // if the command line does not end with & then return
@@ -75,6 +76,12 @@ void _removeBackgroundSign(char* cmd_line) {
     cmd_line[str.find_last_not_of(WHITESPACE, idx) + 1] = 0;
 }
 
+void ErrorHandling(string syscall, bool to_exit){ /* General error message and exit -1 for syscall faliure*/
+    string error_msg = "smash error: " + syscall + " failed";
+    perror(error_msg.c_str());
+    if(to_exit) exit(-1);
+    else return;
+}
 
 /*********************************************************************************************************************/
 /***************************Pipe and Redirection classification functions*********************************************/
@@ -120,8 +127,8 @@ SmallShell::~SmallShell() {
 void SmallShell::executeCommand(const char *cmd_line) {
     Command* cmd = CreateCommand(cmd_line); // external commands must fork
     if(cmd == nullptr) return;
-    if(_isBackgroundComamnd(cmd_line)) smash.getJobsList().addJob(cmd, runningBG);
-    smash.getJobsList().removeFinishedJobs();
+    if(_isBackgroundComamnd(cmd_line)) smash.getJobsList().addJob(cmd);
+    else smash.getJobsList().removeFinishedJobs();
     cmd->execute();
     delete cmd;
 }
@@ -245,19 +252,18 @@ void ExternalCommand::execute() {
     char cmd_c[MAX_COMMAND_LENGTH];
     strcpy(cmd_c, cmd_s.c_str());
     char* argv[] = {bash_cmd, flag, cmd_c, nullptr};
-
     pid_t ext_pid = fork();
     if(ext_pid == -1) ErrorHandling("fork");
     if(ext_pid == 0){ //child process
+        // _removeBackgroundSign(argv[2]);
         if(setpgrp() == -1) ErrorHandling("setpgrp");
         if(execv(bash_cmd, argv) == -1 ) ErrorHandling("execv");
     }
     // father process
     else if(_isBackgroundComamnd(cmd_s.c_str())) return;
-    else {
-        int ret = waitpid(ext_pid, nullptr, 0);
-        if(ret == -1) ErrorHandling("waitpid");
-    }
+    int wstatus;
+    if(waitpid(ext_pid, &wstatus, WUNTRACED) == -1) ErrorHandling("waitpid");
+    else if(WIFSTOPPED(wstatus)) smash.getJobsList().addJob(this, stopped);
 }
 
 void PipeCommand::execute(){
@@ -321,7 +327,6 @@ void RedirectionCommand::execute(){
         if (close(std) == -1) ErrorHandling("close");
         exit(0);
     }
-
     wait(nullptr);
 }
 
@@ -329,17 +334,17 @@ void RedirectionCommand::execute(){
 /****************************************JOBS LIST CLASS IMPLEMENTATION***********************************************/
 /********************************************************************************************************************/
 
-void JobsList::addJob(Command *cmd, status status_before, bool isStopped) {
+void JobsList::addJob(Command *cmd, bool was_at_list,  bool isStopped) {
     removeFinishedJobs();
     //todo if job exist
     status s = (isStopped) ? stopped : runningBG;
-    if(status_before == runningFG){
+    if(was_at_list){
         int old_job_id = smash.getFgJobId();
         _jobs[old_job_id] = JobEntry(old_job_id, cmd, time(nullptr), s);
     }
     else{
         int new_id_job = getMaxId();
-    _jobs[new_id_job] = JobEntry(new_id_job, cmd, time(nullptr), s);
+        _jobs[new_id_job] = JobEntry(new_id_job, cmd, time(nullptr), s);
     }
 }
 
@@ -369,17 +374,15 @@ void JobsList::killAllJobs() {
 }
 
 void JobsList::removeFinishedJobs() {
-    pid_t pid_to_remove = 1;
     for(auto& iter : _jobs){
         pid_t to_find = iter.second.getCommand()->getPid();
-        pid_t temp = waitpid(to_find, NULL, WNOHANG);
+        pid_t temp = waitpid(to_find, nullptr, WNOHANG);
         if(temp == -1) {
             perror("smash error: waitpid failed");
         }
         if(temp == to_find){
             _jobs.erase(iter.first);
         }
-
     }
 }
 
@@ -444,14 +447,20 @@ void ChangeDirCommand::execute() {
        cerr << "smash error: cd: too many arguments" << endl;
        return;
     }
-    if(_args[1] == "-"){
+    string path = _args[1];
+    if(path.compare("-") == 0){
         if(smash.getLastPath() == ""){
             cerr << "smash error: cd: OLDPWD not set" << endl;
             return;
         }
         else{
+            string tmp = smash.getLastPath();
             smash.setLastPath(smash.getCurrPath());
-            smash.setCurrPath(smash.getLastPath());
+            smash.setCurrPath(tmp);
+            if(chdir(tmp.c_str()) == -1) {
+                perror("smash error: chdir failed");
+                return;
+            }
             return;
         }
     }
@@ -611,10 +620,10 @@ void QuitCommand::execute() {
         cout << "smash: sending SIGKILL signal to " << size << " jobs:" << endl;
         smash.getJobsList().killAllJobs();
         cout << "Linux-shell:";
+        exit(0);
         // todo delete smash ?
     }
 }
-#include <fstream>
 
 void HeadCommand::execute() {
     if(_num_of_args == 1){

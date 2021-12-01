@@ -19,15 +19,18 @@ using std::string;
 #define COMMAND_ARGS_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
 #define MAX_PROCCESS_SIMULTAINOUSLY (100)
-#define MAX_PATH (20)
+#define MAX_PATH (40)
 #define MAX_COMMAND_LENGTH (80)
 
 const string WHITESPACE = " \n\r\t\f\v";
 class SmallShell;
 
 enum status{
-    stopped, runningBG, runningFG
+    stopped, runningBG
 };
+
+void ErrorHandling(string syscall, bool to_exit = false);
+
 
 class Command {
 protected:
@@ -107,7 +110,7 @@ class JobEntry {
     time_t _start_time;
     status _status; // status == 1 -> stopped other running in the bg
 public:
-    JobEntry(int job_id = 0, Command* command = nullptr, time_t t = time(0), status s=runningBG) : _job_id(job_id), _command(command), _start_time(t),_status(s) {};
+    JobEntry(int job_id = -1, Command* command = nullptr, time_t t = time(0), status s=runningBG) : _job_id(job_id), _command(command), _start_time(t),_status(s) {};
     JobEntry(const JobEntry& job) { _job_id = job._job_id, _command = job._command, _start_time = job._start_time,_status = job._status;}
     ~JobEntry() = default;
     int getJobId() const {return _job_id;}
@@ -125,7 +128,7 @@ class JobsList {
 public:
     JobsList() = default;
     ~JobsList() = default;
-    void addJob(Command* cmd_line, status status_before = stopped, bool isStopped = false);
+    void addJob(Command *cmd, bool was_at_list = false, bool isStopped = false);
     void printJobsList();
     void killAllJobs();
     void removeFinishedJobs();
@@ -250,11 +253,5 @@ public:
 
 };
 
-void ErrorHandling(string syscall, bool to_exit = false){ /* General error message and exit -1 for syscall faliure*/
-    string error_msg = "smash error: " + syscall + " failed";
-    perror(error_msg.c_str());
-    if(to_exit) exit(-1);
-    else return;
-}
 
 #endif //SMASH_COMMAND_H_

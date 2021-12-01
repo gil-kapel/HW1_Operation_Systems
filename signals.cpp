@@ -14,8 +14,7 @@ void ctrlZHandler(int sig_num) {
     if(fgPid > 0){
         if(kill(fgPid ,SIGSTOP) == -1) ErrorHandling("kill");
         cout << "smash: process " << fgPid << " was stopped" << endl;
-        job_list.removeFinishedJobs();
-        job_list.addJob(cmd, runningFG, true);
+        job_list.addJob(cmd, true, true);
     }
 }
 
@@ -31,11 +30,11 @@ void ctrlCHandler(int sig_num) {
 }
 
 void alarmHandler(int sig_num) {
-    cout << "smash got an alarm" << endl;
-    SmallShell& smash = SmallShell::getInstance();
-    Command* cmd = smash.getAlarmedCmd();
-    if(cmd != nullptr){
-        if(kill(cmd->getPid() ,SIGKILL) == -1) ErrorHandling("kill");
-        cout << "smash: " << cmd << " timed out!" << endl;
-    }
+    // cout << "smash got an alarm" << endl;
+    // SmallShell& smash = SmallShell::getInstance();
+    // Command* cmd = smash.getAlarmedCmd();
+    // if(cmd != nullptr){
+    //     if(kill(cmd->getPid() ,SIGKILL) == -1) ErrorHandling("kill");
+    //     cout << "smash: " << cmd << " timed out!" << endl;
+    // }
 }
