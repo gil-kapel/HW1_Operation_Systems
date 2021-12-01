@@ -3,15 +3,11 @@
 
 #include <vector>
 #include <string>
-#include <unistd.h>
+#include<unistd.h>
 #include <map>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <signal.h>
-#include <fcntl.h>
-#include <ctime>
-#include <fstream>
-
 
 using std::map;
 using std::string;
@@ -19,18 +15,12 @@ using std::string;
 #define COMMAND_ARGS_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
 #define MAX_PROCCESS_SIMULTAINOUSLY (100)
-#define MAX_PATH (40)
+#define MAX_PATH (20)
 #define MAX_COMMAND_LENGTH (80)
-
-const string WHITESPACE = " \n\r\t\f\v";
-class SmallShell;
 
 enum status{
     stopped, runningBG
 };
-
-void ErrorHandling(string syscall, bool to_exit = false);
-
 
 class Command {
 protected:
@@ -68,27 +58,23 @@ public:
 };
 
 class PipeCommand : public Command {
-    // TODO: Add your data members
-    string first_cmd;
-    string sec_cmd;
-    bool is_std_error;
-    SmallShell& smash;
- public:
-    PipeCommand(const char* cmd_line, string first_cmd, string sec_cmd, bool is_std_error, SmallShell& s):
-                            Command(cmd_line), first_cmd(first_cmd), sec_cmd(sec_cmd), is_std_error(is_std_error), smash(s){}
-    virtual ~PipeCommand() = default;
+    string _first_cmd;
+    string _second_cmd;
+    bool _is_error_pipe = false;
+
+public:
+    PipeCommand(const char* cmd_line);
+    virtual ~PipeCommand() {}
     void execute() override;
 };
 
 class RedirectionCommand : public Command {
- // TODO: Add your data members
-    string file_path;
-    string s_cmd;
-    bool isAppended;
- public:
-    explicit RedirectionCommand(const char* cmd_line, string file_path, string s_cmd, bool isAppended): 
-                                            Command(cmd_line), file_path(file_path), s_cmd(s_cmd), isAppended(isAppended){}
-    virtual ~RedirectionCommand() = default;
+    bool _append = false;
+    string _cmd_to_exc;
+    string _file;
+public:
+    explicit RedirectionCommand(const char* cmd_line);
+    ~RedirectionCommand() override = default;
     void execute() override;
     //void prepare() override;
     //void cleanup() override;
@@ -96,7 +82,7 @@ class RedirectionCommand : public Command {
 
 class HeadCommand : public BuiltInCommand {
 public:
-    explicit HeadCommand(const char* cmd_line): BuiltInCommand(cmd_line) {};
+    HeadCommand(const char* cmd_line);
     virtual ~HeadCommand() {}
     void execute() override;
 };
@@ -110,7 +96,7 @@ class JobEntry {
     time_t _start_time;
     status _status; // status == 1 -> stopped other running in the bg
 public:
-    JobEntry(int job_id = -1, Command* command = nullptr, time_t t = time(0), status s=runningBG) : _job_id(job_id), _command(command), _start_time(t),_status(s) {};
+    JobEntry(int job_id, Command* command, time_t t, status s=runningBG) : _job_id(job_id), _command(command), _start_time(t),_status(s) {};
     JobEntry(const JobEntry& job) { _job_id = job._job_id, _command = job._command, _start_time = job._start_time,_status = job._status;}
     ~JobEntry() = default;
     int getJobId() const {return _job_id;}
@@ -128,7 +114,7 @@ class JobsList {
 public:
     JobsList() = default;
     ~JobsList() = default;
-    void addJob(Command *cmd, bool was_at_list = false, bool isStopped = false);
+    void addJob(Command* cmd_line, bool isStopped = false);
     void printJobsList();
     void killAllJobs();
     void removeFinishedJobs();
@@ -138,7 +124,6 @@ public:
     map<int, JobEntry>& getJobs() {return _jobs;}
     int getLastJob();
     int getLastStoppedJob();
-    int getJobByPid(int pid); // need implementation
 };
 
 
@@ -216,15 +201,16 @@ public:
 
 class SmallShell {
 private:
-    // TODO: Add your data members
     string _name = "smash";
     JobsList _jobs_list;
     int _pid;
     SmallShell();
     string _last_path = "";
     string _curr_path = "";
-    Command* _fgCmd;
-    int fgJobId;
+    string _FG_cmd = "";
+    pid_t _FG_pid = -1;
+    bool _is_redirection = false;
+
 public:
     Command *CreateCommand(const char* cmd_line);
     SmallShell(SmallShell const&)      = delete; // disable copy ctor
@@ -243,15 +229,15 @@ public:
     int getPid() const {return _pid;}
     string getLastPath() const {return _last_path;}
     string getCurrPath() const {return _curr_path;}
-    Command* getFgCmd() const {return _fgCmd;}
-    int getFgJobId() const {return fgJobId;}
     void setLastPath(string newLastPath){_last_path = newLastPath;}
     void setCurrPath(string newCurrPath){_curr_path = newCurrPath;}
-    void setFgCmd(Command* Cmd) {_fgCmd = Cmd;}
-    void setFgJobId(int job_id) { fgJobId = job_id; }
     JobsList& getJobsList() {return _jobs_list;}
+    string getFGCmd() const {return _FG_cmd};
+    void
+    setFGCmd(string newFGCmd){ _FG_cmd = newFGCmd;}
+    pid_t getFGpid() const {return _FG_pid};
+    void setFGpid(pid_t newFGpid){ _FG_pid = newFGpid;}
 
 };
-
 
 #endif //SMASH_COMMAND_H_
