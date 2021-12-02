@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <map>
 #include <sys/types.h>
-// #include <sys/wait.h>
+#include <sys/wait.h>
 #include <signal.h>
 #include <fcntl.h>
 #include <ctime>
@@ -18,7 +18,7 @@ using std::string;
 #define COMMAND_ARGS_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
 #define MAX_PROCCESS_SIMULTAINOUSLY (100)
-#define MAX_PATH (50)
+#define MAX_PATH (60)
 #define MAX_COMMAND_LENGTH (80)
 
 const string WHITESPACE = " \n\r\t\f\v";
@@ -35,7 +35,6 @@ int findPipeCommand(const string& cmd_line);
 class Command {
 protected:
     string _cmd_line;
-    pid_t _pid;
 public:
     explicit Command(const char* cmd_line);
     virtual ~Command() = default;
@@ -43,7 +42,6 @@ public:
     //virtual void prepare();
     //virtual void cleanup();
     // TODO: Add your extra methods if needed
-    pid_t getPid() const {return _pid;}
     string getCmdLine() const {return _cmd_line;}
     static bool isNumber(const string &str); // check if the string represent number
 
@@ -62,7 +60,7 @@ public:
 
 class ExternalCommand : public Command {
 public:
-    explicit ExternalCommand(const char* cmd_line) : Command(cmd_line) {};
+    ExternalCommand(const char* cmd_line) : Command(cmd_line) {};
     ~ExternalCommand() override = default;
     void execute() override;
 };
@@ -105,11 +103,13 @@ class JobEntry {
     Command* _command;
     time_t _start_time;
     status _status; // status == 1 -> stopped other running in the bg
+    pid_t _cmd_pid;
 public:
-    JobEntry(int job_id = -1, Command* command = nullptr, time_t t = time(0), status s=runningBG) : _job_id(job_id), _command(command), _start_time(t),_status(s) {};
-    JobEntry(const JobEntry& job) { _job_id = job._job_id, _command = job._command, _start_time = job._start_time,_status = job._status;}
+    JobEntry(int job_id = -1, Command* command = nullptr, pid_t pid = -1, time_t t = time(0), status s=runningBG) : _job_id(job_id), _command(command), _cmd_pid(pid), _start_time(t),_status(s) {};
+    JobEntry(const JobEntry& job) { _job_id = job._job_id, _command = job._command, _cmd_pid = job._cmd_pid, _start_time = job._start_time,_status = job._status;}
     ~JobEntry() = default;
     int getJobId() const {return _job_id;}
+    int getCmdPid() const {return _cmd_pid;}
     string getCmdLine() const {return _command->getCmdLine();}
     double getSecondElapsed() const {return difftime(time(nullptr), _start_time);}
     status getStatus() const{ return _status;}
@@ -124,7 +124,7 @@ class JobsList {
 public:
     JobsList() = default;
     ~JobsList() = default;
-    void addJob(Command* cmd_line, bool isStopped = false, bool was_at_list = false);
+    void addJob(Command* cmd_line, pid_t pid, bool isStopped = false, bool was_at_list = false);
     void printJobsList();
     void killAllJobs();
     void removeFinishedJobs();

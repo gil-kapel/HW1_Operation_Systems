@@ -103,7 +103,6 @@ void SmallShell::executeCommand(const char *cmd_line) {
     if(cmd == nullptr) return;
     smash.getJobsList().removeFinishedJobs();
     if(_isBackgroundComamnd(cmd_line)){
-        smash.getJobsList().addJob(cmd);
         cmd->execute();
     }
     else{
@@ -113,9 +112,8 @@ void SmallShell::executeCommand(const char *cmd_line) {
         cmd->execute();
         smash.setFGCmd(nullptr);
         smash.setFGpid(-1); // NO ONE RUNNING IN FG
+        delete cmd;
     }
-
-    delete cmd;
 }
 
 Command * SmallShell::CreateCommand(const char* cmd_line) {
@@ -175,7 +173,6 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
 /*********************************************************************************************************************/
 
 Command::Command(const char* cmd_line):_cmd_line(cmd_line){
-    _pid = getpid();
 }
 
 bool Command::isNumber(const string &str){
@@ -198,17 +195,18 @@ void ExternalCommand::execute() {
     string cmd_s = _trim(string(_cmd_line));
     char cmd_c[MAX_COMMAND_LENGTH];
     strcpy(cmd_c, cmd_s.c_str());
-    char *argv[] = {bash_cmd, flag, cmd_c};
+    char *argv[] = {bash_cmd, flag, cmd_c, nullptr};
 
     pid_t ext_pid = fork();
     if (ext_pid == -1) ErrorHandling("fork");
-    if (ext_pid == 0) { //child process
+    if (ext_pid == 0) { //child proce
         setpgrp();
         if (execv(bash_cmd, argv) == -1) ErrorHandling("execv");
     } else { // parent process
         int wstatus;
-        if (waitpid(ext_pid, &wstatus, WUNTRACED) == -1) return ErrorHandling("waitpid");
-        if (WIFSTOPPED(wstatus)) smash.getJobsList().addJob(this, true);
+        if(_isBackgroundComamnd(cmd_c)) smash.getJobsList().addJob(this, ext_pid);
+        else if (waitpid(ext_pid, &wstatus, WUNTRACED) == -1) return ErrorHandling("waitpid");
+        if (WIFSTOPPED(wstatus)) smash.getJobsList().addJob(this, ext_pid,  true);
     }
 }
 
@@ -216,23 +214,23 @@ void ExternalCommand::execute() {
 /****************************************JOBS LIST CLASS IMPLEMENTATION***********************************************/
 /********************************************************************************************************************/
 
-void JobsList::addJob(Command *cmd, bool isStopped, bool was_at_list) {
+void JobsList::addJob(Command *cmd, pid_t pid, bool isStopped, bool was_at_list) {
     removeFinishedJobs();
     status s = (isStopped) ? stopped : runningBG;
     if(was_at_list){
         int old_job_id = smash.getFGJobID();
-        _jobs[old_job_id] = JobEntry(old_job_id, cmd, time(nullptr), s);
+        _jobs[old_job_id] = JobEntry(old_job_id, cmd, pid, time(nullptr), s);
     }
     else{
         int new_id_job = getMaxId();
-        _jobs[new_id_job] = JobEntry(new_id_job, cmd, time(nullptr), s);
+        _jobs[new_id_job] = JobEntry(new_id_job, cmd, pid, time(nullptr), s);
     }
 }
 
 void JobsList::printJobsList() {
     removeFinishedJobs();
     for(const auto &iter : _jobs){
-        cout << "[" << iter.first << "]" << " " << iter.second.getCmdLine() << " : " << iter.second.getCommand()->getPid()
+        cout << "[" << iter.first << "]" << " " << iter.second.getCmdLine() << " : " << iter.second.getCmdPid()
              << " " << iter.second.getSecondElapsed() << " secs";
         if(iter.second.getStatus() == stopped){
             cout << "(stopped)" << endl;
@@ -244,7 +242,7 @@ void JobsList::printJobsList() {
 }
 void JobsList::killAllJobs() {
     for(auto &iter : _jobs){
-        pid_t pid_to_kill = iter.second.getCommand()->getPid();
+        pid_t pid_to_kill = iter.second.getCmdPid();
         if (kill(pid_to_kill, SIGKILL) == -1) ErrorHandling("kill");
         cout << pid_to_kill << ": " << iter.second.getCmdLine() << endl;
     }
@@ -253,8 +251,8 @@ void JobsList::killAllJobs() {
 
 void JobsList::removeFinishedJobs() {
     for(auto& iter : _jobs){
-        pid_t to_find = iter.second.getCommand()->getPid();
-        pid_t temp = waitpid(to_find, NULL, WNOHANG);
+        pid_t to_find = iter.second.getCmdPid();
+        pid_t temp = waitpid(-1, nullptr, WNOHANG);
         if(temp == -1) ErrorHandling("waitpid");
         if(temp == to_find){
             _jobs.erase(iter.first);
@@ -309,13 +307,13 @@ void ShowPidCommand::execute() {
 }
 
 void GetCurrDirCommand::execute() { //todo why not to use in cuurent path of smash class
-    char cwd[COMMAND_MAX_ARGS];
+    char cwd[MAX_PATH];
     if(getcwd(cwd, sizeof(cwd)) == nullptr) ErrorHandling("getcwd");
     cout << string(cwd) << endl;
 }
 
 void ChangeDirCommand::execute() {
-    if(_num_of_args > 1){
+    if(_num_of_args > 2){
        cerr << "smash error: cd: too many arguments" << endl;
        return;
     }
@@ -355,7 +353,7 @@ void KillCommand::execute() {
     }
     // check arg 1
     string arg1 = _args[1];
-    if(arg1[1] != '-'){
+    if(arg1[0] != '-'){
         cerr << "smash error: kill: invalid arguments" << endl;
         return;
     }
@@ -372,12 +370,12 @@ void KillCommand::execute() {
         cerr << "smash error: kill: invalid arguments" << endl;
         return;
     }
-    int job_id_get_sig = stoi(arg1);
+    int job_id_get_sig = stoi(arg2);
     if(smash.getJobsList().getJobById(job_id_get_sig) == nullptr){
         cerr << "smash error: kill: job-id " << job_id_get_sig << " does not exist" << endl;
         return;
     }
-    pid_t pid_get_sig = smash.getJobsList().getJobs()[job_id_get_sig].getCommand()->getPid();
+    pid_t pid_get_sig = smash.getJobsList().getJobs()[job_id_get_sig].getCmdPid();
 
     // functionality
     if(kill(pid_get_sig, signum) == -1){
@@ -430,38 +428,41 @@ void ForegroundCommand::execute() {
     else if(_num_of_args == 1){
         job_id_to_fg = smash.getJobsList().getLastJob();
     }
-    Command* cmd = smash.getJobsList().getJobs()[job_id_to_fg].getCommand();
-    pid_t pid_to_fg = cmd->getPid();
-    cout << cmd->getCmdLine() << " : " << pid_to_fg << endl;
+    JobEntry job = smash.getJobsList().getJobs()[job_id_to_fg];
+    Command* cmd = job.getCommand();
+    pid_t pid_to_fg = job.getCmdPid();
+    cout << job.getCommand()->getCmdLine() << " : " << pid_to_fg << endl;
 
-    if(kill(pid_to_fg, SIGCONT) == -1) {
-        perror("smash error: kill failed");
-        return;
-    }
-    smash.setFGCmd(cmd);
+    // if(kill(pid_to_fg, SIGCONT) == -1) {
+    //     perror("smash error: kill failed");
+    //     return;
+    // }
+    smash.setFGCmd(job.getCommand());
     smash.setFGpid(pid_to_fg);
     smash.setFGJobID(job_id_to_fg);
     smash.getJobsList().removeJobById(job_id_to_fg);
-    if(waitpid(pid_to_fg, NULL, WUNTRACED) == -1) { /// todo - check about the WNOHANG option
+    if(waitpid(pid_to_fg, nullptr, WUNTRACED) == -1) { /// todo - check about the WNOHANG option
         perror("smash error: waitpid failed");
+        delete cmd;
         return;
     }
     smash.setFGCmd(nullptr);
     smash.setFGpid(-1); // NO ONE RUNNING IN FG
     smash.setFGJobID(-1);
+    delete cmd;
 
 }
 
 
 void BackgroundCommand::execute() {
-    if(_num_of_args > 1 ){
+    if(_num_of_args > 2 ){
         cerr << "smash error: bg: invalid arguments" << endl;
         return ;
     }
     int job_id_to_running;
-    if(_num_of_args == 1) {
+    if(_num_of_args == 2) {
         // check arg
-        string str_job_id = _args[0];
+        string str_job_id = _args[1];
         if (!isNumber(str_job_id)) {
             cerr << "smash error: bg: invalid arguments" << endl;
             return;
@@ -476,14 +477,14 @@ void BackgroundCommand::execute() {
             return;
         }
     }
-    else if(_num_of_args == 0){
+    else if(_num_of_args == 1){
         job_id_to_running = smash.getJobsList().getLastStoppedJob();
         if(job_id_to_running == 0){
             cerr << "smash error: bg: there is no stopped jobs to resume" << endl;
             return;
         }
     }
-    pid_t pid_to_running = smash.getJobsList().getJobs()[job_id_to_running].getCommand()->getPid();
+    pid_t pid_to_running = smash.getJobsList().getJobs()[job_id_to_running].getCmdPid();
     cout << smash.getJobsList().getJobs()[job_id_to_running].getCmdLine() << " : " << pid_to_running << endl;
     if(kill(pid_to_running, SIGCONT) == -1) {
         perror("smash error: kill failed");
@@ -498,9 +499,10 @@ void QuitCommand::execute() {
         cout << "smash: sending SIGKILL signal to " << size << " jobs:" << endl;
         smash.getJobsList().killAllJobs();
         cout << "Linux-shell:";
-        exit(0);
         // todo delete smash ?
     }
+    exit(0);
+
 }
 
 /**********************************************************************************************************************/
