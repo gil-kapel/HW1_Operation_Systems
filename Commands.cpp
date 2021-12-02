@@ -3,7 +3,6 @@
 #include <iostream>
 #include <vector>
 #include <sstream>
-#include <sys/wait.h>
 #include <iomanip>
 #include "Commands.h"
 
@@ -63,7 +62,7 @@ void _removeBackgroundSign(char* cmd_line) {
     // find last character other than spaces
     unsigned int idx = str.find_last_not_of(WHITESPACE);
     // if all characters are spaces then return
-    if (idx == string::npos) {
+    if (idx > MAX_COMMAND_LENGTH) {
         return;
     }
     // if the command line does not end with & then return
@@ -76,10 +75,11 @@ void _removeBackgroundSign(char* cmd_line) {
     cmd_line[str.find_last_not_of(WHITESPACE, idx) + 1] = 0;
 }
 
-void ErrorHandling(string syscall){ /* General error message and exit -1 for syscall faliure*/
+void ErrorHandling(string syscall, bool to_exit){ /* General error message and exit -1 for syscall faliure*/
     string error_msg = "smash error: " + syscall + " failed";
     perror(error_msg.c_str());
-    exit(-1);
+    if(to_exit) exit(-1);
+    else return;
 }
 
 /**********************************************************************************************************************/
@@ -87,28 +87,31 @@ void ErrorHandling(string syscall){ /* General error message and exit -1 for sys
 /**********************************************************************************************************************/
 
 SmallShell::SmallShell() {
-// TODO: add your implementation
+    _pid = getpid();
+    char dir[MAX_PATH];
+    getcwd(dir,MAX_PATH);
+    _curr_path = dir;
+    _last_path = dir;
 }
 
 SmallShell::~SmallShell() {
-// TODO: add your implementation
+    _jobs_list.killAllJobs();
 }
 
 void SmallShell::executeCommand(const char *cmd_line) {
     Command* cmd = CreateCommand(cmd_line); // external commands must fork
-    if(!cmd){
-        return;
-    }
+    if(cmd == nullptr) return;
     smash.getJobsList().removeFinishedJobs();
     if(_isBackgroundComamnd(cmd_line)){
         smash.getJobsList().addJob(cmd);
         cmd->execute();
     }
     else{
-        smash.setFGCmd(cmd_line);
+        smash.setFGCmd(cmd);
         smash.setFGpid(getpid());
+        // smash.setFGJobID(-1);
         cmd->execute();
-        smash.setFGCmd("");
+        smash.setFGCmd(nullptr);
         smash.setFGpid(-1); // NO ONE RUNNING IN FG
     }
 
@@ -120,8 +123,12 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
     char* args_array[COMMAND_MAX_ARGS];
     int arg_num = _parseCommandLine(cmd_line, args_array);
     string firstWord;
-    if( args_array[0] != NULL ) {
-        firstWord = firstWord.substr(0, firstWord.find_first_of(" \n"));
+    char tempWord[MAX_COMMAND_LENGTH];
+    if( args_array[0] != nullptr ) {
+        firstWord = cmd_s.substr(0, cmd_s.find_first_of(" "));
+        strcpy(tempWord, firstWord.c_str());
+        _removeBackgroundSign(tempWord);
+        firstWord = tempWord;
     }
     else {
         for(int i = 0; i < arg_num; i++) {
@@ -135,51 +142,31 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
     }
 
     /*Built in commands handle*/
-    if (firstWord.compare("chprompt") == 0 || firstWord.compare("chprompt&") == 0){
+    if (firstWord.compare("chprompt") == 0) return new ChPromptCommand(cmd_line);
 
-        return new ChPromptCommand(cmd_line);
-    }
+    else if (firstWord.compare("pwd") == 0) return new GetCurrDirCommand(cmd_line);
 
-    else if (firstWord.compare("pwd") == 0 || firstWord.compare("pwd&") == 0) {
-        return new GetCurrDirCommand(cmd_line);
-    }
+    else if (firstWord.compare("showpid") == 0) return new ShowPidCommand(cmd_line);
 
-    else if (firstWord.compare("showpid") == 0 || firstWord.compare("showpid&") == 0) {
-        return new ShowPidCommand(cmd_line);
-    }
+    else if (firstWord.compare("cd") == 0) return new ChangeDirCommand(cmd_line);
 
-    else if (firstWord.compare("cd") == 0 || firstWord.compare("cd&") == 0) {
-        return new ChangeDirCommand(cmd_line);
-    }
+    else if (firstWord.compare("jobs") == 0) return new JobsCommand(cmd_line);
 
-    else if (firstWord.compare("jobs") == 0 || firstWord.compare("jobs&") == 0) {
-        return new JobsCommand(cmd_line);
-    }
+    else if (firstWord.compare("kill") == 0) return new KillCommand(cmd_line);
 
-    else if (firstWord.compare("kill") == 0 || firstWord.compare("kill&") == 0) {
-        return new KillCommand(cmd_line);
-    }
+    else if (firstWord.compare("fg") == 0) return new ForegroundCommand(cmd_line);
 
-    else if (firstWord.compare("fg") == 0 || firstWord.compare("fg&") == 0) {
-        return new ForegroundCommand(cmd_line);
-    }
-
-    else if (firstWord.compare("bg") == 0 || firstWord.compare("bg&") == 0) {
-        return new BackgroundCommand(cmd_line);
-    }
-    if(firstWord == "quit" || firstWord == "quit&") {
-        return new QuitCommand(cmd_line);
-    }
+    else if (firstWord.compare("bg") == 0) return new BackgroundCommand(cmd_line);
+    
+    if(firstWord == "quit") return new QuitCommand(cmd_line);
 
     /**********SPECIAL COMMAND*********/
+    unsigned re_index = findRedirectionCommand(cmd_s.c_str());
+    if(re_index <= MAX_COMMAND_LENGTH && re_index > 0) return new RedirectionCommand(cmd_line);
 
-    if(cmd_s.find_first_of('>') > 0 && cmd_s.find_first_of('>') != string::npos) {
-        return new RedirectionCommand(cmd_line);
-    }
-    if(cmd_s.find_first_of('|') > 0 && cmd_s.find_first_of('|') != string::npos) {
-        return new PipeCommand(cmd_line);
-    }
-
+    unsigned pipe_index = findPipeCommand(cmd_s.c_str());
+    if(pipe_index <= MAX_COMMAND_LENGTH && pipe_index > 0) return new PipeCommand(cmd_line);
+    
     return new ExternalCommand(cmd_line);
 }
 
@@ -221,9 +208,7 @@ void ExternalCommand::execute() {
     } else { // parent process
         int wstatus;
         if (waitpid(ext_pid, &wstatus, WUNTRACED) == -1) return ErrorHandling("waitpid");
-        if (WIFSTOPPED(wstatus)) {
-            smash.getJobsList().addJob(this, true);
-        }
+        if (WIFSTOPPED(wstatus)) smash.getJobsList().addJob(this, true);
     }
 }
 
@@ -231,12 +216,17 @@ void ExternalCommand::execute() {
 /****************************************JOBS LIST CLASS IMPLEMENTATION***********************************************/
 /********************************************************************************************************************/
 
-void JobsList::addJob(Command *cmd, bool isStopped) {
+void JobsList::addJob(Command *cmd, bool isStopped, bool was_at_list) {
     removeFinishedJobs();
-    //todo if job exist
     status s = (isStopped) ? stopped : runningBG;
-    int new_id_job = getMaxId();
-    _jobs[new_id_job] = JobEntry(new_id_job, cmd, time(nullptr), s);
+    if(was_at_list){
+        int old_job_id = smash.getFGJobID();
+        _jobs[old_job_id] = JobEntry(old_job_id, cmd, time(nullptr), s);
+    }
+    else{
+        int new_id_job = getMaxId();
+        _jobs[new_id_job] = JobEntry(new_id_job, cmd, time(nullptr), s);
+    }
 }
 
 void JobsList::printJobsList() {
@@ -255,26 +245,20 @@ void JobsList::printJobsList() {
 void JobsList::killAllJobs() {
     for(auto &iter : _jobs){
         pid_t pid_to_kill = iter.second.getCommand()->getPid();
-        if (kill(pid_to_kill, SIGKILL) == -1) {
-            perror("smash error: kill failed");
-        }
+        if (kill(pid_to_kill, SIGKILL) == -1) ErrorHandling("kill");
         cout << pid_to_kill << ": " << iter.second.getCmdLine() << endl;
     }
     _jobs.clear();
 }
 
 void JobsList::removeFinishedJobs() {
-    pid_t pid_to_remove = 1;
     for(auto& iter : _jobs){
         pid_t to_find = iter.second.getCommand()->getPid();
         pid_t temp = waitpid(to_find, NULL, WNOHANG);
-        if(temp == -1) {
-            perror("smash error: waitpid failed");
-        }
+        if(temp == -1) ErrorHandling("waitpid");
         if(temp == to_find){
             _jobs.erase(iter.first);
         }
-
     }
 }
 int JobsList::getLastJob() {
@@ -326,29 +310,38 @@ void ShowPidCommand::execute() {
 
 void GetCurrDirCommand::execute() { //todo why not to use in cuurent path of smash class
     char cwd[COMMAND_MAX_ARGS];
-    if(getcwd(cwd, sizeof(cwd)) != NULL){
-        cout << string(cwd) << endl;
-    }
-    else{
-        perror("smash error: getcwd failed");
-    }
+    if(getcwd(cwd, sizeof(cwd)) == nullptr) ErrorHandling("getcwd");
+    cout << string(cwd) << endl;
 }
 
 void ChangeDirCommand::execute() {
-    if(_num_of_args > 2){
+    if(_num_of_args > 1){
        cerr << "smash error: cd: too many arguments" << endl;
        return;
     }
-    if(_args[1] == "-" && smash.getLastPath() == ""){
-        cerr << "smash error: cd: OLDPWD not set" << endl;
-        return;
+    string path = _args[1];
+    if(path.compare("-") == 0){
+        if(smash.getLastPath() == ""){
+            cerr << "smash error: cd: OLDPWD not set" << endl;
+            return;
+        }
+        else{
+            string tmp = smash.getLastPath();
+            smash.setLastPath(smash.getCurrPath());
+            smash.setCurrPath(tmp);
+            if(chdir(tmp.c_str()) == -1) {
+                perror("smash error: chdir failed");
+                return;
+            }
+            return;
+        }
     }
-    if(chdir(*_args) == -1) {
+    if(chdir(_args[1]) == -1) {
         perror("smash error: chdir failed");
         return;
     }
     smash.setLastPath(smash.getCurrPath());
-    smash.setCurrPath(string(*_args));
+    smash.setCurrPath(string(_args[1]));
 }
 
 void JobsCommand::execute() {
@@ -437,23 +430,26 @@ void ForegroundCommand::execute() {
     else if(_num_of_args == 1){
         job_id_to_fg = smash.getJobsList().getLastJob();
     }
-
-    pid_t pid_to_fg = smash.getJobsList().getJobs()[job_id_to_fg].getCommand()->getPid();
-    cout << smash.getJobsList().getJobs()[job_id_to_fg].getCmdLine() << " : " << pid_to_fg << endl;
+    Command* cmd = smash.getJobsList().getJobs()[job_id_to_fg].getCommand();
+    pid_t pid_to_fg = cmd->getPid();
+    cout << cmd->getCmdLine() << " : " << pid_to_fg << endl;
 
     if(kill(pid_to_fg, SIGCONT) == -1) {
         perror("smash error: kill failed");
         return;
     }
-    smash.getJobsList().removeJobById(job_id_to_fg);
-    smash.setFGCmd(_cmd_line);
+    smash.setFGCmd(cmd);
     smash.setFGpid(pid_to_fg);
+    smash.setFGJobID(job_id_to_fg);
+    smash.getJobsList().removeJobById(job_id_to_fg);
     if(waitpid(pid_to_fg, NULL, WUNTRACED) == -1) { /// todo - check about the WNOHANG option
         perror("smash error: waitpid failed");
         return;
     }
-    smash.setFGCmd("");
+    smash.setFGCmd(nullptr);
     smash.setFGpid(-1); // NO ONE RUNNING IN FG
+    smash.setFGJobID(-1);
+
 }
 
 
@@ -502,6 +498,7 @@ void QuitCommand::execute() {
         cout << "smash: sending SIGKILL signal to " << size << " jobs:" << endl;
         smash.getJobsList().killAllJobs();
         cout << "Linux-shell:";
+        exit(0);
         // todo delete smash ?
     }
 }
@@ -603,7 +600,30 @@ void PipeCommand::execute() {
 
 }
 
+void HeadCommand::execute() {
+    if(_num_of_args == 1){
+        cerr<<"smash error: head: not enough arguments"<<endl;
+        return;
+    }
+    if(_num_of_args == 2){
+        char buff[10];
+        if(openat(3, _args[1], O_RDONLY) == -1) ErrorHandling("open");
+        if(write(3, buff, 10)) ErrorHandling("write");
+        if(read(1, buff, 10)) ErrorHandling("read");
+    }
+    if(_num_of_args == 3){
+        int buffer_size = stoi(_args[1]);
+        char buff[buffer_size];
+        if(openat(3, _args[2], O_RDONLY) == -1) ErrorHandling("open");
+        if(read(3, buff, buffer_size)) ErrorHandling("read");
+        if(write(1, buff, buffer_size)) ErrorHandling("write");
 
+    }
+    else{
+        cerr<<"smash error: head: too many arguments"<<endl;
+        return;
+    }
+}
 
 
 

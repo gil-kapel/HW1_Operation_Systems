@@ -8,7 +8,7 @@ using namespace std;
 void ctrlZHandler(int sig_num) {
     cout << "smash: got ctrl-Z" << endl;
     SmallShell& smash = SmallShell::getInstance();
-    Command* cmd = smash.getFgCmd();
+    Command* cmd = smash.getFGCmd();
     pid_t fgPid = cmd->getPid();
     JobsList job_list = smash.getJobsList();
     if(fgPid > 0){

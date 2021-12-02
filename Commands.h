@@ -3,11 +3,14 @@
 
 #include <vector>
 #include <string>
-#include<unistd.h>
+#include <unistd.h>
 #include <map>
 #include <sys/types.h>
-#include <sys/wait.h>
+// #include <sys/wait.h>
 #include <signal.h>
+#include <fcntl.h>
+#include <ctime>
+#include <fstream>
 
 using std::map;
 using std::string;
@@ -15,12 +18,19 @@ using std::string;
 #define COMMAND_ARGS_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
 #define MAX_PROCCESS_SIMULTAINOUSLY (100)
-#define MAX_PATH (20)
+#define MAX_PATH (50)
 #define MAX_COMMAND_LENGTH (80)
+
+const string WHITESPACE = " \n\r\t\f\v";
+class SmallShell;
 
 enum status{
     stopped, runningBG
 };
+
+void ErrorHandling(string syscall, bool to_exit = false);
+int findRedirectionCommand(const string& cmd_line);
+int findPipeCommand(const string& cmd_line);
 
 class Command {
 protected:
@@ -82,7 +92,7 @@ public:
 
 class HeadCommand : public BuiltInCommand {
 public:
-    HeadCommand(const char* cmd_line);
+    explicit HeadCommand(const char* cmd_line): BuiltInCommand(cmd_line) {};
     virtual ~HeadCommand() {}
     void execute() override;
 };
@@ -96,7 +106,7 @@ class JobEntry {
     time_t _start_time;
     status _status; // status == 1 -> stopped other running in the bg
 public:
-    JobEntry(int job_id, Command* command, time_t t, status s=runningBG) : _job_id(job_id), _command(command), _start_time(t),_status(s) {};
+    JobEntry(int job_id = -1, Command* command = nullptr, time_t t = time(0), status s=runningBG) : _job_id(job_id), _command(command), _start_time(t),_status(s) {};
     JobEntry(const JobEntry& job) { _job_id = job._job_id, _command = job._command, _start_time = job._start_time,_status = job._status;}
     ~JobEntry() = default;
     int getJobId() const {return _job_id;}
@@ -114,7 +124,7 @@ class JobsList {
 public:
     JobsList() = default;
     ~JobsList() = default;
-    void addJob(Command* cmd_line, bool isStopped = false);
+    void addJob(Command* cmd_line, bool isStopped = false, bool was_at_list = false);
     void printJobsList();
     void killAllJobs();
     void removeFinishedJobs();
@@ -207,8 +217,10 @@ private:
     SmallShell();
     string _last_path = "";
     string _curr_path = "";
-    string _FG_cmd = "";
+    // string _FG_cmd = "";
+    Command* _FG_cmd;
     pid_t _FG_pid = -1;
+    pid_t _FG_Job_ID = -1;
     bool _is_redirection = false;
 
 public:
@@ -232,11 +244,12 @@ public:
     void setLastPath(string newLastPath){_last_path = newLastPath;}
     void setCurrPath(string newCurrPath){_curr_path = newCurrPath;}
     JobsList& getJobsList() {return _jobs_list;}
-    string getFGCmd() const {return _FG_cmd};
-    void
-    setFGCmd(string newFGCmd){ _FG_cmd = newFGCmd;}
-    pid_t getFGpid() const {return _FG_pid};
+    Command* getFGCmd() const {return _FG_cmd;}
+    void setFGCmd(Command* newFGCmd){ _FG_cmd = newFGCmd;}
+    pid_t getFGpid() const {return _FG_pid;}
+    pid_t getFGJobID() const {return _FG_Job_ID;}
     void setFGpid(pid_t newFGpid){ _FG_pid = newFGpid;}
+    void setFGJobID(pid_t newFGJobID){ _FG_Job_ID = newFGJobID;}
 
 };
 
