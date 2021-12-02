@@ -6,7 +6,6 @@
 #include <iomanip>
 #include "Commands.h"
 
-SmallShell& smash = SmallShell::getInstance();
 using namespace std;
 
 #if 0
@@ -75,7 +74,7 @@ void _removeBackgroundSign(char* cmd_line) {
     cmd_line[str.find_last_not_of(WHITESPACE, idx) + 1] = 0;
 }
 
-void ErrorHandling(string syscall, bool to_exit){ /* General error message and exit -1 for syscall faliure*/
+void ErrorHandling(string syscall, bool to_exit){ /* General error message and exit -1 for syscall faliure*/ 
     string error_msg = "smash error: " + syscall + " failed";
     perror(error_msg.c_str());
     if(to_exit) exit(-1);
@@ -91,7 +90,6 @@ SmallShell::SmallShell() {
     char dir[MAX_PATH];
     getcwd(dir,MAX_PATH);
     _curr_path = dir;
-    _last_path = dir;
 }
 
 SmallShell::~SmallShell() {
@@ -178,7 +176,7 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
     //         smash.getTimedJobsList().addJob(smash.getFGCmd(), timeout_pid, duration, start_time);
     //         if(waitpid(timeout_pid, nullptr, WUNTRACED) == -1) ErrorHandling("waitpid");
     //     }
-    }
+    // }
     return new ExternalCommand(cmd_line);
 }
 
@@ -210,7 +208,6 @@ void ExternalCommand::execute() {
     char cmd_c[MAX_COMMAND_LENGTH];
     strcpy(cmd_c, cmd_s.c_str());
     char *argv[] = {bash_cmd, flag, cmd_c, nullptr};
-
     pid_t ext_pid = fork();
     if (ext_pid == -1) ErrorHandling("fork");
     if (ext_pid == 0) { //child process
@@ -218,9 +215,12 @@ void ExternalCommand::execute() {
         if (execv(bash_cmd, argv) == -1) ErrorHandling("execv");
     } else { // parent process
         int wstatus;
-        if(_isBackgroundComamnd(cmd_c)) smash.getJobsList().addJob(this, ext_pid);
+        if(_isBackgroundComamnd(cmd_c)){
+            smash.getJobsList().addJob(this, ext_pid);
+            return;
+        }
         if (waitpid(ext_pid, &wstatus, WUNTRACED) == -1) return ErrorHandling("waitpid");
-        if (WIFSTOPPED(wstatus)) smash.getJobsList().addJob(this, ext_pid,  true);
+        if (WIFSTOPPED(wstatus)) smash.getJobsList().addJob(this, ext_pid);
     }
 }
 
@@ -228,12 +228,15 @@ void ExternalCommand::execute() {
 /****************************************JOBS LIST CLASS IMPLEMENTATION***********************************************/
 /********************************************************************************************************************/
 
-void JobsList::addJob(Command *cmd, pid_t pid, bool isStopped, bool was_at_list) {
+void JobsList::addJob(Command *cmd, pid_t pid, bool isStopped) {
     removeFinishedJobs();
     status s = (isStopped) ? stopped : runningBG;
-    if(was_at_list){
+    if(smash.getFGJobID() != -1){
         int old_job_id = smash.getFGJobID();
         _jobs[old_job_id] = JobEntry(old_job_id, cmd, pid, time(nullptr), s);
+        smash.setFGJobID(-1);
+        smash.setFGCmd(nullptr);
+        smash.setFGpid(-1);
     }
     else{
         int new_id_job = getMaxId();
@@ -258,6 +261,7 @@ void JobsList::killAllJobs() {
     for(auto &iter : _jobs){
         pid_t pid_to_kill = iter.second.getCmdPid();
         if (kill(pid_to_kill, SIGKILL) == -1) ErrorHandling("kill");
+        delete iter.second.getCommand();
         cout << pid_to_kill << ": " << iter.second.getCmdLine() << endl;
     }
     _jobs.clear();
@@ -266,7 +270,7 @@ void JobsList::killAllJobs() {
 void JobsList::removeFinishedJobs() {
     for(auto& iter : _jobs){
         pid_t to_find = iter.second.getCmdPid();
-        pid_t temp = waitpid(-1, nullptr, WNOHANG);
+        pid_t temp = waitpid(to_find, nullptr, WNOHANG);
         if(temp == -1) ErrorHandling("waitpid");
         if(temp == to_find){
             _jobs.erase(iter.first);
@@ -516,7 +520,6 @@ void QuitCommand::execute() {
         // todo delete smash ?
     }
     exit(0);
-
 }
 
 /**********************************************************************************************************************/
@@ -613,7 +616,7 @@ PipeCommand::PipeCommand(const char *cmd_line) : Command(cmd_line) {
 }
 
 void PipeCommand::execute() {
-
+    
 }
 
 void HeadCommand::execute() {
@@ -629,11 +632,10 @@ void HeadCommand::execute() {
     }
     if(_num_of_args == 3){
         int buffer_size = stoi(_args[1]);
-        char buff[buffer_size];
+        char* buff = new char [buffer_size];
         if(openat(3, _args[2], O_RDONLY) == -1) ErrorHandling("open");
         if(read(3, buff, buffer_size)) ErrorHandling("read");
         if(write(1, buff, buffer_size)) ErrorHandling("write");
-
     }
     else{
         cerr<<"smash error: head: too many arguments"<<endl;

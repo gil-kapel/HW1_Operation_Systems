@@ -14,7 +14,7 @@ void ctrlZHandler(int sig_num) {
     if(fgPid > 0){
         if(kill(fgPid ,SIGSTOP) == -1) ErrorHandling("kill");
         cout << "smash: process " << fgPid << " was stopped" << endl;
-        job_list.addJob(cmd, fgPid, true, true);
+        job_list.addJob(cmd, fgPid, true);
     }
 }
 

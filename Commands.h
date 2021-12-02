@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <map>
 #include <sys/types.h>
-#include <sys/wait.h>
+// #include <sys/wait.h>
 #include <signal.h>
 #include <fcntl.h>
 #include <ctime>
@@ -108,7 +108,7 @@ class JobEntry {
 public:
     JobEntry(int job_id = -1, Command* command = nullptr, pid_t pid = -1, time_t t = time(0), status s=runningBG) : _job_id(job_id), _command(command), _cmd_pid(pid), _start_time(t),_status(s) {};
     JobEntry(const JobEntry& job) { _job_id = job._job_id, _command = job._command, _cmd_pid = job._cmd_pid, _start_time = job._start_time,_status = job._status;}
-    ~JobEntry() = default;
+    ~JobEntry() {delete _command;}
     int getJobId() const {return _job_id;}
     int getCmdPid() const {return _cmd_pid;}
     string getCmdLine() const {return _command->getCmdLine();}
@@ -125,7 +125,7 @@ class JobsList {
 public:
     JobsList() = default;
     ~JobsList() = default;
-    void addJob(Command* cmd_line, pid_t pid, bool isStopped = false, bool was_at_list = false);
+    void addJob(Command* cmd_line, pid_t pid, bool isStopped = false);
     void printJobsList();
     void killAllJobs();
     void removeFinishedJobs();
@@ -230,7 +230,7 @@ private:
     int _pid;
     SmallShell();
     string _last_path = "";
-    string _curr_path = "";
+    string _curr_path;
     // string _FG_cmd = "";
     Command* _FG_cmd;
     pid_t _FG_pid = -1;
@@ -267,5 +267,7 @@ public:
     void setFGJobID(pid_t newFGJobID){ _FG_Job_ID = newFGJobID;}
 
 };
+
+SmallShell& smash = SmallShell::getInstance();
 
 #endif //SMASH_COMMAND_H_
