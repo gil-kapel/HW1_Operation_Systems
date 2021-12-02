@@ -1,0 +1,3 @@
+"C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E rm -f CMakeFiles\smash.dir/objects.a
+C:\TDM-GCC-64\bin\ar.exe qc CMakeFiles\smash.dir/objects.a @CMakeFiles\smash.dir\objects1.rsp
+g++ -std=c++11  -g -Wl,--whole-archive CMakeFiles\smash.dir/objects.a -Wl,--no-whole-archive -o smash.exe -Wl,--out-implib,libsmash.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\smash.dir\linklibs.rsp

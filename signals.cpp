@@ -21,7 +21,6 @@ void ctrlZHandler(int sig_num) {
 void ctrlCHandler(int sig_num) {
     cout << "smash: got ctrl-C" << endl;
     SmallShell& smash = SmallShell::getInstance();
-    Command* cmd = smash.getFGCmd();
     pid_t fgPid = smash.getFGpid();
     if(fgPid > 0){
         if(kill(fgPid ,SIGKILL) == -1) ErrorHandling("kill");
@@ -30,11 +29,11 @@ void ctrlCHandler(int sig_num) {
 }
 
 void alarmHandler(int sig_num) {
-    // cout << "smash got an alarm" << endl;
-    // SmallShell& smash = SmallShell::getInstance();
-    // Command* cmd = smash.getAlarmedCmd();
-    // if(cmd != nullptr){
-    //     if(kill(cmd->getPid() ,SIGKILL) == -1) ErrorHandling("kill");
-    //     cout << "smash: " << cmd << " timed out!" << endl;
-    // }
+    cout << "smash got an alarm" << endl;
+    SmallShell& smash = SmallShell::getInstance();
+    pid_t alarm_pid = smash.getFGpid();
+    if(alarm_pid > 0){
+        if(kill(alarm_pid, SA_RESTART ,SIGKILL) == -1) ErrorHandling("kill");
+        cout << "smash: " << cmd << " timed out!" << endl;
+    }
 }

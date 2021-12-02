@@ -95,6 +95,7 @@ public:
     void execute() override;
 };
 
+
 /*********************************************************************************************************************/
 /*****************************************JOB LIST*******************************************************************/
 
@@ -136,6 +137,18 @@ public:
     int getLastStoppedJob();
 };
 
+#include <list>
+
+class TimedJobList{
+    list<time_t, JobEntry> _timed_jobs = {};
+public:
+    TimedJobList() = default;
+    ~TimedJobList() = default;
+    void addTimedJob(Command* cmd_line, pid_t pid, time_t duration);
+    void killAllJobs();
+    void removeJobById(int jobId){ _jobs.erase(jobId); }
+    list<time_t, JobEntry>& getJobs() {return _timed_jobs;}
+};
 
 /*****************************************************************/
 /***********************BUILD-IN COMMANDS*************************/
@@ -213,6 +226,7 @@ class SmallShell {
 private:
     string _name = "smash";
     JobsList _jobs_list;
+    JobsList _timed_jobs_list;
     int _pid;
     SmallShell();
     string _last_path = "";
@@ -244,6 +258,7 @@ public:
     void setLastPath(string newLastPath){_last_path = newLastPath;}
     void setCurrPath(string newCurrPath){_curr_path = newCurrPath;}
     JobsList& getJobsList() {return _jobs_list;}
+    JobsList& getTimedJobsList() {return _timed_jobs_list;}
     Command* getFGCmd() const {return _FG_cmd;}
     void setFGCmd(Command* newFGCmd){ _FG_cmd = newFGCmd;}
     pid_t getFGpid() const {return _FG_pid;}

@@ -129,15 +129,11 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
         firstWord = tempWord;
     }
     else {
-        for(int i = 0; i < arg_num; i++) {
-            free(args_array[i]);
-        }
+        for(int i = 0; i < arg_num; i++) free(args_array[i]);
         return nullptr;
     }
     // free
-    for(int i = 0; i < arg_num; i++) {
-        free(args_array[i]);
-    }
+    for(int i = 0; i < arg_num; i++) free(args_array[i]);
 
     /*Built in commands handle*/
     if (firstWord.compare("chprompt") == 0) return new ChPromptCommand(cmd_line);
@@ -156,7 +152,7 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
 
     else if (firstWord.compare("bg") == 0) return new BackgroundCommand(cmd_line);
     
-    if(firstWord == "quit") return new QuitCommand(cmd_line);
+    else if(firstWord == "quit") return new QuitCommand(cmd_line);
 
     /**********SPECIAL COMMAND*********/
     unsigned re_index = findRedirectionCommand(cmd_s.c_str());
@@ -165,6 +161,24 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
     unsigned pipe_index = findPipeCommand(cmd_s.c_str());
     if(pipe_index <= MAX_COMMAND_LENGTH && pipe_index > 0) return new PipeCommand(cmd_line);
     
+    // if(firstWord == "timeout"){
+    //     pid_t timeout_pid = fork();
+    //     if (timeout_pid == -1) ErrorHandling("fork");
+    //     if (timeout_pid == 0) { //child process
+    //         setpgrp();
+    //         cmd_s = _trim(string(cmd_line));
+    //         string new_cmd = cmd_s;
+    //         arg_num = _parseCommandLine(cmd_line, args_array);
+    //         new_cmd = new_cmd.substr(2,arg_num);
+    //         for(int i = 0; i < arg_num; i++) free(args_array[i]);
+    //         smash.setFGCmd(CreateCommand(new_cmd.c_str()));
+    //         if(kill(timeout_pid, SIG_ALRM) == -1) ErrorHandling("kill");
+    //     }
+    //     else{
+    //         smash.getTimedJobsList().addJob(smash.getFGCmd(), timeout_pid, duration, start_time);
+    //         if(waitpid(timeout_pid, nullptr, WUNTRACED) == -1) ErrorHandling("waitpid");
+    //     }
+    }
     return new ExternalCommand(cmd_line);
 }
 
@@ -199,13 +213,13 @@ void ExternalCommand::execute() {
 
     pid_t ext_pid = fork();
     if (ext_pid == -1) ErrorHandling("fork");
-    if (ext_pid == 0) { //child proce
+    if (ext_pid == 0) { //child process
         setpgrp();
         if (execv(bash_cmd, argv) == -1) ErrorHandling("execv");
     } else { // parent process
         int wstatus;
         if(_isBackgroundComamnd(cmd_c)) smash.getJobsList().addJob(this, ext_pid);
-        else if (waitpid(ext_pid, &wstatus, WUNTRACED) == -1) return ErrorHandling("waitpid");
+        if (waitpid(ext_pid, &wstatus, WUNTRACED) == -1) return ErrorHandling("waitpid");
         if (WIFSTOPPED(wstatus)) smash.getJobsList().addJob(this, ext_pid,  true);
     }
 }
