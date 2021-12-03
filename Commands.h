@@ -8,6 +8,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <sstream>
 
 using std::map;
 using std::string;
@@ -60,11 +61,11 @@ public:
 class PipeCommand : public Command {
     string _first_cmd;
     string _second_cmd;
-    bool _is_error_pipe = false;
+    bool _is_std_error = false;
 
 public:
-    PipeCommand(const char* cmd_line);
-    virtual ~PipeCommand() {}
+    explicit PipeCommand(const char* cmd_line);
+    ~PipeCommand() override = default;
     void execute() override;
 };
 
@@ -81,6 +82,8 @@ public:
 };
 
 class HeadCommand : public BuiltInCommand {
+    int _lines = 10;
+    string _file_path;
 public:
     HeadCommand(const char* cmd_line);
     virtual ~HeadCommand() {}
@@ -95,6 +98,7 @@ class JobEntry {
     Command* _command;
     time_t _start_time;
     status _status; // status == 1 -> stopped other running in the bg
+    pid_t _pid;
 public:
     JobEntry(int job_id, Command* command, time_t t, status s=runningBG) : _job_id(job_id), _command(command), _start_time(t),_status(s) {};
     JobEntry(const JobEntry& job) { _job_id = job._job_id, _command = job._command, _start_time = job._start_time,_status = job._status;}

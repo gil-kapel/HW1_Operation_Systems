@@ -219,6 +219,7 @@ void ExternalCommand::execute() {
         setpgrp();
         if (execv(bash_cmd, argv) == -1) ErrorHandling("execv");
     } else { // parent process
+
         int wstatus;
         if (waitpid(ext_pid, &wstatus, WUNTRACED) == -1) return ErrorHandling("waitpid");
         if (WIFSTOPPED(wstatus)) {
@@ -566,13 +567,6 @@ void RedirectionCommand::execute() { //todo try and catch
     if (dup(old_std_out) == -1) ErrorHandling("dup");
     if (close(old_std_out) == -1) ErrorHandling("close");
 }
-//    if(dynamic_cast<ExternalCommand*>(command)){ // external command
-//
-//    }
-//    else{ //build-in command
-//
-//
-//    }
 
 /************** pipe ********************/
 
@@ -591,7 +585,7 @@ PipeCommand::PipeCommand(const char *cmd_line) : Command(cmd_line) {
     int pipe_index = findPipeCommand(cmd_s);
     _first_cmd = cmd_s.substr(0, pipe_index - 1);
     if(isErrorPipe(cmd_s.c_str())) {
-        _is_error_pipe = true;
+        _is_std_error = true;
         _second_cmd = _trim(cmd_s.substr(pipe_index + 2));
     }
     else{
@@ -600,11 +594,88 @@ PipeCommand::PipeCommand(const char *cmd_line) : Command(cmd_line) {
 }
 
 void PipeCommand::execute() {
+//    Command* first_command = smash.CreateCommand(_first_cmd.c_str());
+//
+//    Command* second = smash.CreateCommand(_second_cmd.c_str());
+    int fd[2];
+    if(pipe(fd) == -1) ErrorHandling("pipe");
 
+    // save parameter to restore
+    int old_std_in = dup(0);
+    int old_std_out = dup(1);
+    int old_std_error = dup(2);
+
+    pid_t pid = fork();
+    if(first_pid == -1) ErrorHandling("fork");
+    Command* first_command;
+    Command* second_command;
+
+    int index;
+    if(_is_std_error) index = 1;
+    else index = 2;
+    if(dup2(fd[1], index) == -1) ErrorHandling("dup2");
+    if(close(fd[0]) == -1) ErrorHandling("close");
+    if(close(fd[1]) == -1) ErrorHandling("close");
+    first_command = smash.CreateCommand(_first_cmd.c_str());
+    first_command->execute();
+    delete first_command;
+
+    if(pid == 0){ //son
+        if(setpgrp() == -1) ErrorHandling("setpgrp");
+        if(dup2(fd[0],0) == -1) ErrorHandling("dup2");
+        if(close(fd[0]) == -1) ErrorHandling("close");
+        if(close(fd[1]) == -1) ErrorHandling("close");
+        //for execv
+        char bash_cmd[] = {"/bin/bash"};
+        char flag[] = {"-c"};
+        string cmd_s = _trim(string(_cmd_line));
+        char cmd_c[MAX_COMMAND_LENGTH];
+        strcpy(cmd_c, cmd_s.c_str());
+        char *argv[] = {bash_cmd, flag, cmd_c};
+        if (execv(bash_cmd, argv) == -1) ErrorHandling("execv");
+        second_command = smash.CreateCommand(_second_cmd.c_str());
+        second_command->execute();
+        delete second_command;
+    }
+    else{ // father
+        if (waitpid(pid, nullptr, 0) == -1) return ErrorHandling("waitpid");
+    }
+
+    // restore STDIN, STDOUT, STDERROR
+    if(dup2(old_std_in, 0) == -1) ErrorHandling("dup2");
+    if(dup2(old_std_out, 1) == -1) ErrorHandling("dup2");
+    if(dup2(old_std_error, 2) == -1) ErrorHandling("dup2");
 }
 
-
-
+HeadCommand::HeadCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {
+    if(_num_of_args == 3){
+        _lines = int(_args[1][1]);
+    }
+}
+void HeadCommand::execute() {
+    if(_num_of_args == 1){
+        cerr<<"smash error: head: not enough arguments"<<endl;
+        return;
+    }
+    int fd_open = open(_args[2], O_RDONLY);
+    if(fd_open == -1) return ErrorHandling("open");
+    int counter_lines = 1;
+    while(counter_lines <= _lines){
+        char* buff = new char [100];
+        int bytes = read(fd_open, buff, 100);
+        if(bytes == -1 ) ErrorHandling("read");
+        int i;
+        for(i = 0 ; i < bytes ; ++i){
+            if(buff[i] == '\n'){
+                counter_lines++;
+                if(counter_lines > _lines) break;
+            }
+        }
+        if(write(2, buff, i)) ErrorHandling("write");
+        delete[] buff;
+        if(bytes < 100 || i < 100) break; // end of file or read the lines we needed
+    }
+}
 
 
 
