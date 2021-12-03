@@ -207,6 +207,7 @@ void ExternalCommand::execute() {
     if (ext_pid == -1) ErrorHandling("fork");
     if (ext_pid == 0) { //child process
         setpgrp();
+        _removeBackgroundSign(argv[2]);
         if (execv(bash_cmd, argv) == -1) ErrorHandling("execv");
     } else { // parent process
         int wstatus;
@@ -327,9 +328,10 @@ void ChangeDirCommand::execute() {
        cerr << "smash error: cd: too many arguments" << endl;
        return;
     }
+    if(_num_of_args == 1) return;
     string path = _args[1];
     if(path.compare("-") == 0){
-        if(smash.getLastPath() == "" || smash.getLastPath() == "/"){
+        if(smash.getLastPath() == ""){
             cerr << "smash error: cd: OLDPWD not set" << endl;
             return;
         }
@@ -337,16 +339,21 @@ void ChangeDirCommand::execute() {
             string tmp = smash.getLastPath();
             smash.setLastPath(smash.getCurrPath());
             smash.setCurrPath(tmp);
-            if(chdir(tmp.c_str()) == -1) {
-                perror("smash error: chdir failed");
-                return;
-            }
+            if(chdir(tmp.c_str()) == -1) ErrorHandling("chdir");
             return;
         }
     }
-    else if(chdir(_args[1]) == -1) {
-        perror("smash error: chdir failed");
+    if(path.compare("..") == 0){
+        string currPath = smash.getCurrPath();
+        smash.setLastPath(currPath);
+        if(currPath.compare("/home") != 0) smash.setCurrPath(currPath.substr(0, currPath.find_last_of("/")));
+        if(chdir(smash.getCurrPath().c_str()) == -1) ErrorHandling("chdir");
         return;
+    }
+    else if(chdir(_args[1]) == -1) ErrorHandling("chdir");
+    string currPath = smash.getCurrPath();
+    if(path.find("home") == string::npos){
+        path = currPath + "/" + path;
     }
     smash.setLastPath(smash.getCurrPath());
     smash.setCurrPath(path);
