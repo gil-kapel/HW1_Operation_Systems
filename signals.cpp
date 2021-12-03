@@ -11,7 +11,7 @@ void ctrlZHandler(int sig_num) {
     Command* cmd = smash.getFGCmd();
     pid_t fgPid = smash.getFGpid();
     JobsList job_list = smash.getJobsList();
-    if(fgPid > 0){
+    if(fgPid > 0 ){
         job_list.addJob(cmd, fgPid, true);
         if(kill(fgPid ,SIGSTOP) == -1) ErrorHandling("kill");
         cout << "smash: process " << fgPid << " was stopped" << endl;

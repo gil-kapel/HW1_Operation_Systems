@@ -141,7 +141,7 @@ public:
     ~JobsList() = default;
     void addJob(Command* cmd_line, pid_t pid, bool isStopped = false);
     void printJobsList();
-    void killAllJobs();
+    void killAllJobs(bool to_print = true);
     void removeFinishedJobs();
     void removeJobById(int jobId){ _jobs.erase(jobId); }
     JobEntry * getJobById(int jobId);

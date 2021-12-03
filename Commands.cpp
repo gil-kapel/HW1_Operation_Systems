@@ -99,7 +99,8 @@ SmallShell::SmallShell() {
 }
 
 SmallShell::~SmallShell() {
-    _jobs_list.killAllJobs();
+    bool to_print = false;
+    _jobs_list.killAllJobs(to_print);
 }
 
 void SmallShell::executeCommand(const char *cmd_line) {
@@ -170,7 +171,9 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
     else if (firstWord.compare("bg") == 0) return new BackgroundCommand(cmd_line);
     
     else if(firstWord == "quit") return new QuitCommand(cmd_line);
-    
+
+    else if (firstWord.compare("head") == 0) return new HeadCommand(cmd_line);
+
     else if(firstWord == "timeout") return new TimedOutCommand(cmd_line, time(0)); /*Error handling?*/
 
     else return new ExternalCommand(cmd_line);
@@ -212,8 +215,12 @@ void ExternalCommand::execute() {
     } else { // parent process
         int wstatus;
         if(_isBackgroundComamnd(cmd_c)) smash.getJobsList().addJob(this, ext_pid);
-        else if (waitpid(ext_pid, &wstatus, WUNTRACED) == -1) return ErrorHandling("waitpid");
-        else if (WIFSTOPPED(wstatus)) smash.getJobsList().addJob(this, ext_pid);
+        else{
+            smash.setFGCmd(this);
+            smash.setFGpid(ext_pid);
+            if (waitpid(ext_pid, &wstatus, WUNTRACED) == -1) return ErrorHandling("waitpid");
+            else if (WIFSTOPPED(wstatus)) smash.getJobsList().addJob(smash.getFGCmd(), ext_pid);
+        }
     }
 }
 
@@ -228,8 +235,8 @@ void JobsList::addJob(Command *cmd, pid_t pid, bool isStopped) {
         int old_job_id = smash.getFGJobID();
         _jobs[old_job_id] = JobEntry(old_job_id, cmd, pid, time(nullptr), s);
         smash.setFGJobID(-1);
-        // smash.setFGCmd(nullptr);
-        // smash.setFGpid(-1);
+        smash.setFGCmd(nullptr);
+        smash.setFGpid(-1);
     }
     else{
         int new_id_job = getMaxId();
@@ -250,18 +257,23 @@ void JobsList::printJobsList() {
         }
     }
 }
-void JobsList::killAllJobs() {
-    for(auto &iter : _jobs){
-        pid_t pid_to_kill = iter.second.getCmdPid();
-        if (kill(pid_to_kill, SIGKILL) == -1) ErrorHandling("kill");
-        delete iter.second.getCommand();
-        cout << pid_to_kill << ": " << iter.second.getCmdLine() << endl;
+void JobsList::killAllJobs(bool to_print) {
+    if(!_jobs.empty()){
+        for(auto &iter : _jobs){
+            if(iter.first == 0) break;
+            pid_t pid_to_kill = iter.second.getCmdPid();
+            if (kill(pid_to_kill, SIGKILL) == -1) ErrorHandling("kill");
+            if(to_print) cout << pid_to_kill << ": " << iter.second.getCmdLine() << endl;
+            delete iter.second.getCommand();
+        }
+        _jobs.clear();
+        _max_id_job = 0;
     }
-    _jobs.clear();
 }
 
 void JobsList::removeFinishedJobs() {
     for(auto& iter : _jobs){
+        if(iter.first == 0) break;
         pid_t to_find = iter.second.getCmdPid();
         pid_t temp = waitpid(to_find, nullptr, WNOHANG);
         if(temp == -1) ErrorHandling("waitpid");
@@ -274,6 +286,7 @@ int JobsList::getLastJob() {
     if(_jobs.empty()) return 0;
     int last_id_job = 0;
     for(auto &iter : _jobs){
+        if(iter.first == 0) break;
         int temp_id_job = iter.first;
         if(temp_id_job > last_id_job){
             last_id_job = temp_id_job;
@@ -286,6 +299,7 @@ int JobsList::getLastStoppedJob() {
     if(_jobs.empty()) return 0;
     int last_id_job = 0;
     for(auto &iter : _jobs){
+        if(iter.first == 0) break;
         int temp_id_job = iter.first;
         if(iter.second.getStatus() == stopped && (temp_id_job > last_id_job)){
             last_id_job = temp_id_job;
@@ -450,10 +464,8 @@ void ForegroundCommand::execute() {
     pid_t pid_to_fg = job.getCmdPid();
     cout << job.getCommand()->getCmdLine() << " : " << pid_to_fg << endl;
 
-    // if(kill(pid_to_fg, SIGCONT) == -1) {
-    //     perror("smash error: kill failed");
-    //     return;
-    // }
+    if(kill(pid_to_fg, SIGCONT) == -1) ErrorHandling("kill");
+
     smash.setFGCmd(job.getCommand());
     smash.setFGpid(pid_to_fg);
     smash.setFGJobID(job_id_to_fg);
@@ -511,12 +523,10 @@ void BackgroundCommand::execute() {
 }
 
 void QuitCommand::execute() {
-    if (_num_of_args == 1 && (strcmp(_args[0], "kill") == 0)) {
+    if (_num_of_args == 2 && (strcmp(_args[1], "kill") == 0)) {
         int size = smash.getJobsList().getJobs().size();
         cout << "smash: sending SIGKILL signal to " << size << " jobs:" << endl;
         smash.getJobsList().killAllJobs();
-        cout << "Linux-shell:";
-        // todo delete smash ?
     }
     exit(0);
 }
@@ -670,7 +680,7 @@ void PipeCommand::execute() {
 
 HeadCommand::HeadCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {
     if(_num_of_args == 3){
-        _lines = int(_args[1][1]);
+        _lines = stoi(_args[1]);
     }
 }
 void HeadCommand::execute() {
@@ -678,7 +688,9 @@ void HeadCommand::execute() {
         cerr<<"smash error: head: not enough arguments"<<endl;
         return;
     }
-    int fd_open = open(_args[2], O_RDONLY);
+    int file_index = 2;
+    if(_num_of_args == 2) file_index = 1;
+    int fd_open = open(_args[file_index], O_RDONLY);
     if(fd_open == -1) return ErrorHandling("open");
     int counter_lines = 1;
     while(counter_lines <= _lines){
@@ -692,7 +704,7 @@ void HeadCommand::execute() {
                 if(counter_lines > _lines) break;
             }
         }
-        if(write(2, buff, i)) ErrorHandling("write");
+        if(write(2, buff, i+1) == -1) ErrorHandling("write");
         delete[] buff;
         if(bytes < 100 || i < 100) break; // end of file or read the lines we needed
     }
