@@ -6,7 +6,7 @@
 #include <unistd.h>
 #include <map>
 #include <sys/types.h>
-// #include <sys/wait.h>
+#include <sys/wait.h>
 #include <signal.h>
 #include <fcntl.h>
 #include <ctime>
@@ -68,11 +68,11 @@ public:
 class PipeCommand : public Command {
     string _first_cmd;
     string _second_cmd;
-    bool _is_error_pipe = false;
+    bool _is_std_error = false;
 
 public:
-    PipeCommand(const char* cmd_line);
-    virtual ~PipeCommand() {}
+    explicit PipeCommand(const char* cmd_line);
+    ~PipeCommand() override = default;
     void execute() override;
 };
 
@@ -89,12 +89,26 @@ public:
 };
 
 class HeadCommand : public BuiltInCommand {
+    int _lines = 10;
+    string _file_path;
 public:
-    explicit HeadCommand(const char* cmd_line): BuiltInCommand(cmd_line) {};
+    HeadCommand(const char* cmd_line);
     virtual ~HeadCommand() {}
     void execute() override;
 };
 
+class TimedOutCommand : public Command {
+    unsigned duration;
+    string _timed_cmd;
+    time_t start_time;
+public:
+    explicit TimedOutCommand(const char* cmd_line, time_t start);
+    virtual ~TimedOutCommand() {}
+    int getDuration(){ return duration;}
+    string getTimedCommand(){return _timed_cmd;}
+    bool isTimeOut(time_t start_time, time_t current_time){ return (current_time - start_time) >= duration ;}
+    void execute() override;
+};
 
 /*********************************************************************************************************************/
 /*****************************************JOB LIST*******************************************************************/
@@ -108,7 +122,7 @@ class JobEntry {
 public:
     JobEntry(int job_id = -1, Command* command = nullptr, pid_t pid = -1, time_t t = time(0), status s=runningBG) : _job_id(job_id), _command(command), _cmd_pid(pid), _start_time(t),_status(s) {};
     JobEntry(const JobEntry& job) { _job_id = job._job_id, _command = job._command, _cmd_pid = job._cmd_pid, _start_time = job._start_time,_status = job._status;}
-    ~JobEntry() {delete _command;}
+    ~JobEntry() = default;
     int getJobId() const {return _job_id;}
     int getCmdPid() const {return _cmd_pid;}
     string getCmdLine() const {return _command->getCmdLine();}
@@ -137,18 +151,18 @@ public:
     int getLastStoppedJob();
 };
 
-#include <list>
+// #include <list>
 
-class TimedJobList{
-    list<time_t, JobEntry> _timed_jobs = {};
-public:
-    TimedJobList() = default;
-    ~TimedJobList() = default;
-    void addTimedJob(Command* cmd_line, pid_t pid, time_t duration);
-    void killAllJobs();
-    void removeJobById(int jobId){ _jobs.erase(jobId); }
-    list<time_t, JobEntry>& getJobs() {return _timed_jobs;}
-};
+// class TimedJobList{
+//     list<time_t, JobEntry> _timed_jobs = {};
+// public:
+//     TimedJobList() = default;
+//     ~TimedJobList() = default;
+//     void addTimedJob(Command* cmd_line, pid_t pid, time_t duration);
+//     void killAllJobs();
+//     void removeJobById(int jobId){ _jobs.erase(jobId); }
+//     list<time_t, JobEntry>& getJobs() {return _timed_jobs;}
+// };
 
 /*****************************************************************/
 /***********************BUILD-IN COMMANDS*************************/
@@ -268,6 +282,5 @@ public:
 
 };
 
-SmallShell& smash = SmallShell::getInstance();
 
 #endif //SMASH_COMMAND_H_
