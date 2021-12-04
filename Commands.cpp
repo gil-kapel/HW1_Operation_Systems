@@ -543,7 +543,7 @@ int findRedirectionCommand(const string& cmd_line){ /* return the index of the f
 }
 bool isAppendRedirection(const char* cmd_line){
     const string str(cmd_line);
-    return (str.find_first_of(">>") > MAX_COMMAND_LENGTH);
+    return (str.find_first_of(">>") != string::npos);
 }
 
 
@@ -588,8 +588,10 @@ void RedirectionCommand::execute() { //todo try and catch
     command->execute();
     delete command;
     // return to old std out
+    if (close(fd_file) == -1) ErrorHandling("close");
     if (dup(old_std_out) == -1) ErrorHandling("dup");
     if (close(old_std_out) == -1) ErrorHandling("close");
+
 }
 //    if(dynamic_cast<ExternalCommand*>(command)){ // external command
 //
@@ -640,36 +642,32 @@ void PipeCommand::execute() {
     if(pid == -1) ErrorHandling("fork");
     Command* first_command;
     Command* second_command;
-
     int index;
-    if(_is_std_error) index = 1;
-    else index = 2;
-    if(dup2(fd[1], index) == -1) ErrorHandling("dup2");
-    if(close(fd[0]) == -1) ErrorHandling("close");
-    if(close(fd[1]) == -1) ErrorHandling("close");
-    first_command = smash.CreateCommand(_first_cmd.c_str());
-    first_command->execute();
-    delete first_command;
+    if(_is_std_error) index = 2;
+    else index = 1;
 
     if(pid == 0){ //son
         if(setpgrp() == -1) ErrorHandling("setpgrp");
         if(dup2(fd[0],0) == -1) ErrorHandling("dup2");
         if(close(fd[0]) == -1) ErrorHandling("close");
         if(close(fd[1]) == -1) ErrorHandling("close");
-        //for execv
-        char bash_cmd[] = {"/bin/bash"};
-        char flag[] = {"-c"};
-        string cmd_s = _trim(string(_cmd_line));
-        char cmd_c[MAX_COMMAND_LENGTH];
-        strcpy(cmd_c, cmd_s.c_str());
-        char *argv[] = {bash_cmd, flag, cmd_c};
-        if (execv(bash_cmd, argv) == -1) ErrorHandling("execv");
-        second_command = smash.CreateCommand(_second_cmd.c_str());
-        second_command->execute();
-        delete second_command;
+        first_command = smash.CreateCommand(_first_cmd.c_str());
+        first_command->execute();
+        delete first_command;
     }
     else{ // father
         if (waitpid(pid, nullptr, 0) == -1) return ErrorHandling("waitpid");
+
+        if(dup2(fd[1], index) == -1) ErrorHandling("dup2");
+        if(close(fd[0]) == -1) ErrorHandling("close");
+        if(close(fd[1]) == -1) ErrorHandling("close");
+        char bash_cmd[] = {"/bin/bash"};
+        char flag[] = {"-c"};
+        char cmd_c[MAX_COMMAND_LENGTH];
+        strcpy(cmd_c, _second_cmd.c_str());
+        char *argv[] = {bash_cmd, flag, cmd_c, nullptr};
+        if (execv(bash_cmd, argv) == -1) ErrorHandling("execv");
+        delete second_command;
     }
 
     // restore STDIN, STDOUT, STDERROR
@@ -680,7 +678,7 @@ void PipeCommand::execute() {
 
 HeadCommand::HeadCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {
     if(_num_of_args == 3){
-        _lines = stoi(_args[1]);
+        _lines = abs(stoi(_args[1]));
     }
 }
 void HeadCommand::execute() {
