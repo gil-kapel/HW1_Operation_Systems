@@ -119,6 +119,7 @@ void SmallShell::executeCommand(const char *cmd_line) {
         smash.setFGpid(getpid());
         // smash.setFGJobID(-1);
         cmd->execute();
+        if(cmd->isCmsStopped()) return;
         smash.setFGCmd(nullptr);
         smash.setFGpid(-1); // NO ONE RUNNING IN FG
         delete cmd;
@@ -219,7 +220,13 @@ void ExternalCommand::execute() {
             smash.setFGCmd(this);
             smash.setFGpid(ext_pid);
             if (waitpid(ext_pid, &wstatus, WUNTRACED) == -1) return ErrorHandling("waitpid");
-            else if (WIFSTOPPED(wstatus)) smash.getJobsList().addJob(smash.getFGCmd(), ext_pid);
+            else if (WIFSTOPPED(wstatus)){
+                smash.getJobsList().addJob(this, ext_pid, true);
+                smash.setFGCmd(nullptr);
+                smash.setFGpid(-1);
+                this->setCmdStatus(true);
+            }
+
         }
     }
 }

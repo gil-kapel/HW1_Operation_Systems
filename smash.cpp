@@ -4,6 +4,8 @@
 #include "Commands.h"
 #include "signals.h"
 
+extern SmallShell& smash;
+
 int main(int argc, char* argv[]) {
 
     if(signal(SIGTSTP , ctrlZHandler)==SIG_ERR) {

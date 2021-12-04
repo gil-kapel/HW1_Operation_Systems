@@ -35,6 +35,7 @@ int findPipeCommand(const string& cmd_line);
 class Command {
 protected:
     string _cmd_line;
+    bool is_stopped = false;
 public:
     explicit Command(const char* cmd_line);
     virtual ~Command() = default;
@@ -43,6 +44,8 @@ public:
     //virtual void cleanup();
     // TODO: Add your extra methods if needed
     string getCmdLine() const {return _cmd_line;}
+    void setCmdStatus(bool isStopped){if(isStopped) is_stopped = true; }
+    bool isCmsStopped(){return is_stopped;}
     static bool isNumber(const string &str); // check if the string represent number
 
 };
