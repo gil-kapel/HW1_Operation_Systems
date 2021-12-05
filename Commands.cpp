@@ -208,18 +208,18 @@ void ExternalCommand::execute() {
     strcpy(cmd_c, cmd_s.c_str());
     char *argv[] = {bash_cmd, flag, cmd_c, nullptr};
     pid_t ext_pid = fork();
-    if (ext_pid == -1) ErrorHandling("fork");
+    if (ext_pid == -1) return ErrorHandling("fork");
     if (ext_pid == 0) { //child process
         setpgrp();
         _removeBackgroundSign(argv[2]);
-        if (execv(bash_cmd, argv) == -1) ErrorHandling("execv");
+        if (execv(bash_cmd, argv) == -1) return ErrorHandling("execv");
     } else { // parent process
         int wstatus;
         if(_isBackgroundComamnd(cmd_c)) smash.getJobsList().addJob(this, ext_pid);
         else{
             smash.setFGCmd(this);
             smash.setFGpid(ext_pid);
-            if (waitpid(ext_pid, &wstatus, WUNTRACED) == -1) return ErrorHandling("waitpid");
+            if (waitpid(ext_pid, &wstatus, WUNTRACED) == -1)  return ErrorHandling("waitpid");
             else if (WIFSTOPPED(wstatus)){
                 smash.getJobsList().addJob(this, ext_pid, true);
                 smash.setFGCmd(nullptr);
@@ -269,7 +269,7 @@ void JobsList::killAllJobs(bool to_print) {
         for(auto &iter : _jobs){
             if(iter.first == 0) break;
             pid_t pid_to_kill = iter.second.getCmdPid();
-            if (kill(pid_to_kill, SIGKILL) == -1) ErrorHandling("kill");
+            if (kill(pid_to_kill, SIGKILL) == -1) return ErrorHandling("kill");
             if(to_print) cout << pid_to_kill << ": " << iter.second.getCmdLine() << endl;
             delete iter.second.getCommand();
         }
@@ -283,7 +283,7 @@ void JobsList::removeFinishedJobs() {
         if(iter.first == 0) break;
         pid_t to_find = iter.second.getCmdPid();
         pid_t temp = waitpid(to_find, nullptr, WNOHANG);
-        if(temp == -1) ErrorHandling("waitpid");
+        if(temp == -1) return ErrorHandling("waitpid");
         if(temp == to_find){
             _jobs.erase(iter.first);
         }
@@ -340,7 +340,7 @@ void ShowPidCommand::execute() {
 
 void GetCurrDirCommand::execute() { //todo why not to use in cuurent path of smash class
     char cwd[MAX_PATH];
-    if(getcwd(cwd, sizeof(cwd)) == nullptr) ErrorHandling("getcwd");
+    if(getcwd(cwd, sizeof(cwd)) == nullptr) return ErrorHandling("getcwd");
     cout << string(cwd) << endl;
 }
 
@@ -360,7 +360,7 @@ void ChangeDirCommand::execute() {
             string tmp = smash.getLastPath();
             smash.setLastPath(smash.getCurrPath());
             smash.setCurrPath(tmp);
-            if(chdir(tmp.c_str()) == -1) ErrorHandling("chdir");
+            if(chdir(tmp.c_str()) == -1) return ErrorHandling("chdir");
             return;
         }
     }
@@ -368,10 +368,10 @@ void ChangeDirCommand::execute() {
         string currPath = smash.getCurrPath();
         smash.setLastPath(currPath);
         if(currPath.compare("/home") != 0) smash.setCurrPath(currPath.substr(0, currPath.find_last_of("/")));
-        if(chdir(smash.getCurrPath().c_str()) == -1) ErrorHandling("chdir");
+        if(chdir(smash.getCurrPath().c_str()) == -1) return ErrorHandling("chdir");
         return;
     }
-    else if(chdir(_args[1]) == -1) ErrorHandling("chdir");
+    else if(chdir(_args[1]) == -1) return ErrorHandling("chdir");
     string currPath = smash.getCurrPath();
     if(path.find("home") == string::npos){
         path = currPath + "/" + path;
@@ -471,7 +471,7 @@ void ForegroundCommand::execute() {
     pid_t pid_to_fg = job.getCmdPid();
     cout << job.getCommand()->getCmdLine() << " : " << pid_to_fg << endl;
 
-    if(kill(pid_to_fg, SIGCONT) == -1) ErrorHandling("kill");
+    if(kill(pid_to_fg, SIGCONT) == -1) return ErrorHandling("kill");
 
     smash.setFGCmd(job.getCommand());
     smash.setFGpid(pid_to_fg);
@@ -572,11 +572,11 @@ void RedirectionCommand::execute() { //todo try and catch
     int old_std_out = dup(1);
     if (old_std_out == -1) {
         delete command;
-        ErrorHandling("dup");
+        return ErrorHandling("dup");
     }
     if (close(1) == -1) {
         delete command;
-        ErrorHandling("close");
+        return ErrorHandling("close");
     }
     int fd_file;
 
@@ -588,16 +588,16 @@ void RedirectionCommand::execute() { //todo try and catch
     if (fd_file == -1) {
         delete command;
         // return to old std out
-        if (dup(old_std_out) == -1) ErrorHandling("dup");
-        if (close(old_std_out) == -1) ErrorHandling("close");
-        ErrorHandling("open");
+        if (dup(old_std_out) == -1) return ErrorHandling("dup");
+        if (close(old_std_out) == -1) return ErrorHandling("close");
+        return ErrorHandling("open");
     }
     command->execute();
     delete command;
     // return to old std out
-    if (close(fd_file) == -1) ErrorHandling("close");
-    if (dup(old_std_out) == -1) ErrorHandling("dup");
-    if (close(old_std_out) == -1) ErrorHandling("close");
+    if (close(fd_file) == -1) return ErrorHandling("close");
+    if (dup(old_std_out) == -1) return ErrorHandling("dup");
+    if (close(old_std_out) == -1) return ErrorHandling("close");
 
 }
 //    if(dynamic_cast<ExternalCommand*>(command)){ // external command
@@ -638,7 +638,7 @@ void PipeCommand::execute() {
 //
 //    Command* second = smash.CreateCommand(_second_cmd.c_str());
     int fd[2];
-    if(pipe(fd) == -1) ErrorHandling("pipe");
+    if(pipe(fd) == -1) return ErrorHandling("pipe");
 
     // save parameter to restore
     int old_std_in = dup(0);
@@ -646,7 +646,7 @@ void PipeCommand::execute() {
     int old_std_error = dup(2);
 
     pid_t pid = fork();
-    if(pid == -1) ErrorHandling("fork");
+    if(pid == -1) return ErrorHandling("fork");
     Command* first_command;
     Command* second_command;
     int index;
@@ -654,33 +654,32 @@ void PipeCommand::execute() {
     else index = 1;
 
     if(pid == 0){ //son
-        if(setpgrp() == -1) ErrorHandling("setpgrp");
-        if(dup2(fd[0],0) == -1) ErrorHandling("dup2");
-        if(close(fd[0]) == -1) ErrorHandling("close");
-        if(close(fd[1]) == -1) ErrorHandling("close");
+        if(setpgrp() == -1) return ErrorHandling("setpgrp");
+        if(dup2(fd[0],0) == -1) return ErrorHandling("dup2");
+        if(close(fd[0]) == -1) return ErrorHandling("close");
+        if(close(fd[1]) == -1) return ErrorHandling("close");
         first_command = smash.CreateCommand(_first_cmd.c_str());
         first_command->execute();
         delete first_command;
     }
     else{ // father
-        if (waitpid(pid, nullptr, 0) == -1) return ErrorHandling("waitpid");
-
-        if(dup2(fd[1], index) == -1) ErrorHandling("dup2");
-        if(close(fd[0]) == -1) ErrorHandling("close");
-        if(close(fd[1]) == -1) ErrorHandling("close");
+        if (waitpid(pid, nullptr, 0) == -1)  return ErrorHandling("waitpid");
+        if(dup2(fd[1], index) == -1) return ErrorHandling("dup2");
+        if(close(fd[0]) == -1) return ErrorHandling("close");
+        if(close(fd[1]) == -1) return ErrorHandling("close");
         char bash_cmd[] = {"/bin/bash"};
         char flag[] = {"-c"};
         char cmd_c[MAX_COMMAND_LENGTH];
         strcpy(cmd_c, _second_cmd.c_str());
         char *argv[] = {bash_cmd, flag, cmd_c, nullptr};
-        if (execv(bash_cmd, argv) == -1) ErrorHandling("execv");
+        if (execv(bash_cmd, argv) == -1) return ErrorHandling("execv");
         delete second_command;
     }
 
     // restore STDIN, STDOUT, STDERROR
-    if(dup2(old_std_in, 0) == -1) ErrorHandling("dup2");
-    if(dup2(old_std_out, 1) == -1) ErrorHandling("dup2");
-    if(dup2(old_std_error, 2) == -1) ErrorHandling("dup2");
+    if(dup2(old_std_in, 0) == -1) return ErrorHandling("dup2");
+    if(dup2(old_std_out, 1) == -1) return ErrorHandling("dup2");
+    if(dup2(old_std_error, 2) == -1) return ErrorHandling("dup2");
 }
 
 HeadCommand::HeadCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {
@@ -701,7 +700,7 @@ void HeadCommand::execute() {
     while(counter_lines <= _lines){
         char* buff = new char [100];
         int bytes = read(fd_open, buff, 100);
-        if(bytes == -1 ) ErrorHandling("read");
+        if(bytes == -1 ) return ErrorHandling("read");
         int i;
         for(i = 0 ; i < bytes ; ++i){
             if(buff[i] == '\n'){
@@ -709,7 +708,7 @@ void HeadCommand::execute() {
                 if(counter_lines > _lines) break;
             }
         }
-        if(write(2, buff, i+1) == -1) ErrorHandling("write");
+        if(write(1, buff, i+1) == -1) return ErrorHandling("write");
         delete[] buff;
         if(bytes < 100 || i < 100) break; // end of file or read the lines we needed
     }
@@ -747,15 +746,15 @@ cmd_type FindCmdType(Command* cmd){
 void TimedOutCommand::execute(){
     smash.getTimedJobsList().removeFinishedJobs();
     int child_pid = fork();
-    if(child_pid == -1) ErrorHandling("fork");
+    if(child_pid == -1) return ErrorHandling("fork");
     else if(child_pid == 0){
-        if(setpgrp() == -1) ErrorHandling("setpgrp");
+        if(setpgrp() == -1) return ErrorHandling("setpgrp");
         smash.executeCommand(_timed_cmd.c_str());
     }
     else{
         smash.getTimedJobsList().addJob(this, child_pid);
         while(isTimeOut(start_time, time(0)) == false);
-        if(kill(child_pid, SIGALRM) == -1) ErrorHandling("kill");        
+        if(kill(child_pid, SIGALRM) == -1) return ErrorHandling("kill");        
     }
 }
 
