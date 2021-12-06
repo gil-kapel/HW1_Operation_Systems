@@ -62,7 +62,8 @@ bool _isBackgroundComamnd(const char* cmd_line) {
 void _removeBackgroundSign(char* cmd_line) {
     const string str(cmd_line);
     // find last character other than spaces
-    unsigned int idx = str.find_last_of("&");
+    // unsigned int idx = str.find_last_of("&");
+    unsigned int idx = str.find_last_not_of(WHITESPACE);
     // if all characters are spaces then return
     if (idx > MAX_COMMAND_LENGTH) {
         return;
@@ -624,7 +625,8 @@ will return str::npos if there isn't any | sign */
 
 bool isErrorPipe(const char* cmd_line){
     const string str(cmd_line);
-    return (str.find_first_of("|&") > MAX_COMMAND_LENGTH);
+    int index = str.find_first_of("|&");
+    return (str[index + 1] == '&');
 }
 
 PipeCommand::PipeCommand(const char *cmd_line) : Command(cmd_line) {
@@ -638,9 +640,16 @@ PipeCommand::PipeCommand(const char *cmd_line) : Command(cmd_line) {
     else{
         _second_cmd = _trim(cmd_s.substr(pipe_index + 1));
     }
+    // remove background signs from both commands
     
-    // _removeBackgroundSign(_first_cmd);
-    // _removeBackgroundSign(_second_cmd);
+    char tempWord[MAX_COMMAND_LENGTH];
+    strcpy(tempWord, _first_cmd.c_str());
+    _removeBackgroundSign(tempWord);
+    _first_cmd = tempWord;
+
+    strcpy(tempWord, _second_cmd.c_str());
+    _removeBackgroundSign(tempWord);
+    _second_cmd = tempWord;
 
 }
 
@@ -691,12 +700,6 @@ void PipeCommand::execute() {
         if(close(fd[1]) == -1) return ErrorHandling("close");
         second_command = smash.CreateCommand(_second_cmd.c_str());
         second_command->execute();
-        // char bash_cmd[] = {"/bin/bash"};
-        // char flag[] = {"-c"};
-        // char cmd_c[MAX_COMMAND_LENGTH];
-        // strcpy(cmd_c, _second_cmd.c_str());
-        // char *argv[] = {bash_cmd, flag, cmd_c, nullptr};
-        // if (execv(bash_cmd, argv) == -1) return ErrorHandling("execv");
         delete second_command;
     }
 
