@@ -97,8 +97,8 @@ class HeadCommand : public BuiltInCommand {
     int _lines = 10;
     string _file_path;
 public:
-    HeadCommand(const char* cmd_line);
-    virtual ~HeadCommand() {}
+    explicit HeadCommand(const char* cmd_line);
+    ~HeadCommand() override = default;
     void execute() override;
 };
 
@@ -140,7 +140,7 @@ public:
 class JobsList {
     map<int, JobEntry> _jobs = {};
 //    int _num_of_jobs = 1;
-    int _max_id_job = 0;
+    int _max_id_job;
 public:
     JobsList() = default;
     ~JobsList() = default;
@@ -150,7 +150,7 @@ public:
     void removeFinishedJobs();
     void removeJobById(int jobId){ _jobs.erase(jobId); }
     JobEntry * getJobById(int jobId);
-    int getMaxId() { _max_id_job++; return _max_id_job; }
+    int getMaxId() { return (_jobs.empty()) ? 1 : ( ((_jobs.rbegin())->first) +1 ); }
     map<int, JobEntry>& getJobs() {return _jobs;}
     int getLastJob();
     int getLastStoppedJob();
