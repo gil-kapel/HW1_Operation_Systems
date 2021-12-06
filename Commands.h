@@ -133,7 +133,10 @@ public:
     string getCmdLine() const {return _command->getCmdLine();}
     double getSecondElapsed() const {return difftime(time(nullptr), _start_time);}
     status getStatus() const{ return _status;}
-    void setStatus(status newStatus) {_status = newStatus;}
+    void setStatus(status newStatus) {
+        _status = newStatus;
+        _command->setCmdStatus(newStatus == stopped);
+    }
     Command* getCommand() const{return _command;}
 };
 

@@ -399,8 +399,7 @@ void KillCommand::execute() {
         return;
     }
     arg1 = arg1.substr(1, arg1.size() - 1);
-    int signum = stoi(arg1);
-    if(!isNumber(arg1) || signum > 31 || signum < 1 ){
+    if(!isNumber(arg1) || (stoi(arg1) > 31 || stoi(arg1) < 1 )){
         cerr << "smash error: kill: invalid arguments" << endl;
         return;
     }
@@ -416,9 +415,11 @@ void KillCommand::execute() {
         cerr << "smash error: kill: job-id " << job_id_get_sig << " does not exist" << endl;
         return;
     }
-    pid_t pid_get_sig = smash.getJobsList().getJobs()[job_id_get_sig].getCmdPid();
+    JobEntry& job = smash.getJobsList().getJobs()[job_id_get_sig];
+    pid_t pid_get_sig = job.getCmdPid();
 
     // functionality
+    int signum = stoi(arg1);
     if(kill(pid_get_sig, signum) == -1){
         perror("smash error: kill failed");
         return;
@@ -433,14 +434,14 @@ void KillCommand::execute() {
             }
         }
         if(signum == SIGSTOP || signum == SIGTSTP){
-            smash.getJobsList().getJobs()[job_id_get_sig].setStatus(stopped);
+            job.setStatus(stopped);
             return;
         }
         if(signum == SIGCONT){
-            smash.getJobsList().getJobs()[job_id_get_sig].setStatus(runningBG);
+            job.setStatus(runningBG);
         }
     }
-    cout<< "signal number " << signum <<" was sent to pid "<< job_id_get_sig << endl;
+    cout<< "signal number " << signum <<" was sent to pid "<< job.getCmdPid() << endl;
 }
 
 void ForegroundCommand::execute() {
@@ -480,16 +481,18 @@ void ForegroundCommand::execute() {
     smash.setFGpid(pid_to_fg);
     smash.setFGJobID(job_id_to_fg);
     smash.getJobsList().removeJobById(job_id_to_fg);
-    if(waitpid(pid_to_fg, nullptr, WUNTRACED) == -1) { /// todo - check about the WNOHANG option
+    int wstatus;
+    if(waitpid(pid_to_fg, &wstatus, WUNTRACED) == -1) { /// todo - check about the WNOHANG option
         perror("smash error: waitpid failed");
         delete cmd;
         return;
     }
-    smash.setFGCmd(nullptr);
-    smash.setFGpid(-1); // NO ONE RUNNING IN FG
-    smash.setFGJobID(-1);
-    delete cmd;
-
+    else if (WIFSTOPPED(wstatus)){
+        smash.getJobsList().addJob(cmd, pid_to_fg, true);
+        smash.setFGCmd(nullptr);
+        smash.setFGpid(-1);
+        this->setCmdStatus(true);
+    }
 }
 
 
@@ -553,14 +556,15 @@ int findRedirectionCommand(const string& cmd_line){ /* return the index of the f
 }
 bool isAppendRedirection(const char* cmd_line){
     const string str(cmd_line);
-    return (str.find_first_of(">>") != string::npos);
+    int index = findRedirectionCommand(str);
+    return (str[index + 1] == '>');
 }
 
 
 RedirectionCommand::RedirectionCommand(const char *cmd_line) : Command(cmd_line){
     string cmd_s = _trim(string(cmd_line));
     int re_index = findRedirectionCommand(cmd_s);
-    _cmd_to_exc = _trim(cmd_s.substr(0, re_index - 1));
+    _cmd_to_exc = _trim(cmd_s.substr(0, re_index));
     if(isAppendRedirection(cmd_s.c_str())){
             _file = _trim(cmd_s.substr(re_index + 2));
             _append = true;
