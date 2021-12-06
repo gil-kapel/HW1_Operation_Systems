@@ -728,7 +728,7 @@ void HeadCommand::execute() {
     while(counter_lines <= _lines){
         char* buff = new char [100];
         int bytes = read(fd_open, buff, 100);
-        if(bytes == -1 ) return ErrorHandling("read");
+        if(bytes == -1) return ErrorHandling("read");
         int i;
         for(i = 0 ; i < bytes ; ++i){
             if(buff[i] == '\n'){
@@ -736,7 +736,10 @@ void HeadCommand::execute() {
                 if(counter_lines > _lines) break;
             }
         }
-        if(write(1, buff, i+1) == -1) return ErrorHandling("write");
+        if(bytes == i){
+            if(write(1, buff, i) == -1) return ErrorHandling("write");
+        }
+        else if(write(1, buff, i+1) == -1) return ErrorHandling("write");
         delete[] buff;
         if(bytes < 100) break; // end of file or read the lines we needed
     }
