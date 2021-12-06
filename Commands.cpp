@@ -666,8 +666,7 @@ void PipeCommand::execute() {
         if(close(fd[0]) == -1) return ErrorHandling("close");
         if(close(fd[1]) == -1) return ErrorHandling("close");
         first_command = smash.CreateCommand(_first_cmd.c_str());
-        if(dynamic_cast<BuiltInCommand*>(first_command) != nullptr && 
-           _first_cmd.substr(0, _first_cmd.find_first_of(WHITESPACE)).compare("head") != 0){ //build in command
+        if(dynamic_cast<BuiltInCommand*>(first_command) != nullptr ) { //build in command
             first_command->execute();
         }
         else{ // external command
@@ -704,13 +703,12 @@ void PipeCommand::execute() {
 }
 
 HeadCommand::HeadCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {
-    if(_num_of_args == 3 && !isNumber(_args[1])) _lines = -1;
-    else if(_num_of_args == 3){
+    if(_num_of_args == 3){
         _lines = abs(stoi(_args[1]));
     }
 }
 void HeadCommand::execute() {
-    if(_lines == -1) return;
+    // not check if have too many argument and if have 2 argument the second one must be name of file
     if(_num_of_args == 1){
         cerr<<"smash error: head: not enough arguments"<<endl;
         return;
@@ -733,7 +731,7 @@ void HeadCommand::execute() {
         }
         if(write(1, buff, i+1) == -1) return ErrorHandling("write");
         delete[] buff;
-        if(bytes < 100 || i < 100) break; // end of file or read the lines we needed
+        if(bytes < 100) break; // end of file or read the lines we needed
     }
 }
 
