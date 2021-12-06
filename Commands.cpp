@@ -62,7 +62,7 @@ bool _isBackgroundComamnd(const char* cmd_line) {
 void _removeBackgroundSign(char* cmd_line) {
     const string str(cmd_line);
     // find last character other than spaces
-    unsigned int idx = str.find_last_not_of(WHITESPACE);
+    unsigned int idx = str.find_last_of("&");
     // if all characters are spaces then return
     if (idx > MAX_COMMAND_LENGTH) {
         return;
@@ -137,6 +137,7 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
         strcpy(tempWord, firstWord.c_str());
         _removeBackgroundSign(tempWord);
         firstWord = tempWord;
+        firstWord = _trim(firstWord);
     }
     else {
         for(int i = 0; i < arg_num; i++) free(args_array[i]);
@@ -200,6 +201,7 @@ BuiltInCommand::~BuiltInCommand(){
         free(_args[i]);
     }
 }
+
 void ExternalCommand::execute() {
     char bash_cmd[] = {"/bin/bash"};
     char flag[] = {"-c"};
@@ -212,21 +214,22 @@ void ExternalCommand::execute() {
     if (ext_pid == 0) { //child process
         setpgrp();
         _removeBackgroundSign(argv[2]);
-        if (execv(bash_cmd, argv) == -1) return ErrorHandling("execv");
+        if (execv(bash_cmd, argv) == -1){
+            ErrorHandling("execv", true);
+        }
     } else { // parent process
         int wstatus;
         if(_isBackgroundComamnd(cmd_c)) smash.getJobsList().addJob(this, ext_pid);
         else{
             smash.setFGCmd(this);
             smash.setFGpid(ext_pid);
-            if (waitpid(ext_pid, &wstatus, WUNTRACED) == -1)  return ErrorHandling("waitpid");
+            if (waitpid(ext_pid, &wstatus, WUNTRACED) == -1) return ErrorHandling("waitpid");
             else if (WIFSTOPPED(wstatus)){
                 smash.getJobsList().addJob(this, ext_pid, true);
                 smash.setFGCmd(nullptr);
                 smash.setFGpid(-1);
                 this->setCmdStatus(true);
             }
-
         }
     }
 }
@@ -631,6 +634,10 @@ PipeCommand::PipeCommand(const char *cmd_line) : Command(cmd_line) {
     else{
         _second_cmd = _trim(cmd_s.substr(pipe_index + 1));
     }
+    
+    // _removeBackgroundSign(_first_cmd);
+    // _removeBackgroundSign(_second_cmd);
+
 }
 
 void PipeCommand::execute() {
@@ -655,24 +662,38 @@ void PipeCommand::execute() {
 
     if(pid == 0){ //son
         if(setpgrp() == -1) return ErrorHandling("setpgrp");
-        if(dup2(fd[0],0) == -1) return ErrorHandling("dup2");
+        if(dup2(fd[1],index) == -1) return ErrorHandling("dup2");
         if(close(fd[0]) == -1) return ErrorHandling("close");
         if(close(fd[1]) == -1) return ErrorHandling("close");
         first_command = smash.CreateCommand(_first_cmd.c_str());
-        first_command->execute();
+        if(dynamic_cast<BuiltInCommand*>(first_command) != nullptr && 
+           _first_cmd.substr(0, _first_cmd.find_first_of(WHITESPACE)).compare("head") != 0){
+            first_command->execute();
+        }
+        else{
+            char bash_cmd[] = {"/bin/bash"};
+            char flag[] = {"-c"};
+            char cmd_c[MAX_COMMAND_LENGTH];
+            strcpy(cmd_c, _first_cmd.c_str());
+            char *argv[] = {bash_cmd, flag, cmd_c, nullptr};
+            if (execv(bash_cmd, argv) == -1) return ErrorHandling("execv");
+        }
         delete first_command;
+        exit(0);
     }
     else{ // father
-        if (waitpid(pid, nullptr, 0) == -1)  return ErrorHandling("waitpid");
-        if(dup2(fd[1], index) == -1) return ErrorHandling("dup2");
+        if (waitpid(pid, nullptr, WUNTRACED) == -1)  return ErrorHandling("waitpid");
+        if(dup2(fd[0], 0) == -1) return ErrorHandling("dup2");
         if(close(fd[0]) == -1) return ErrorHandling("close");
         if(close(fd[1]) == -1) return ErrorHandling("close");
-        char bash_cmd[] = {"/bin/bash"};
-        char flag[] = {"-c"};
-        char cmd_c[MAX_COMMAND_LENGTH];
-        strcpy(cmd_c, _second_cmd.c_str());
-        char *argv[] = {bash_cmd, flag, cmd_c, nullptr};
-        if (execv(bash_cmd, argv) == -1) return ErrorHandling("execv");
+        second_command = smash.CreateCommand(_second_cmd.c_str());
+        second_command->execute();
+        // char bash_cmd[] = {"/bin/bash"};
+        // char flag[] = {"-c"};
+        // char cmd_c[MAX_COMMAND_LENGTH];
+        // strcpy(cmd_c, _second_cmd.c_str());
+        // char *argv[] = {bash_cmd, flag, cmd_c, nullptr};
+        // if (execv(bash_cmd, argv) == -1) return ErrorHandling("execv");
         delete second_command;
     }
 

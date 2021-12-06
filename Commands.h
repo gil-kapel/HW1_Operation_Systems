@@ -11,6 +11,8 @@
 #include <fcntl.h>
 #include <ctime>
 #include <fstream>
+#include <chrono>
+#include <thread>
 
 using std::map;
 using std::string;
