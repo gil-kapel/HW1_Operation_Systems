@@ -667,10 +667,10 @@ void PipeCommand::execute() {
         if(close(fd[1]) == -1) return ErrorHandling("close");
         first_command = smash.CreateCommand(_first_cmd.c_str());
         if(dynamic_cast<BuiltInCommand*>(first_command) != nullptr && 
-           _first_cmd.substr(0, _first_cmd.find_first_of(WHITESPACE)).compare("head") != 0){
+           _first_cmd.substr(0, _first_cmd.find_first_of(WHITESPACE)).compare("head") != 0){ //build in command
             first_command->execute();
         }
-        else{
+        else{ // external command
             char bash_cmd[] = {"/bin/bash"};
             char flag[] = {"-c"};
             char cmd_c[MAX_COMMAND_LENGTH];
@@ -704,11 +704,13 @@ void PipeCommand::execute() {
 }
 
 HeadCommand::HeadCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {
-    if(_num_of_args == 3){
+    if(_num_of_args == 3 && !isNumber(_args[1])) _lines = -1;
+    else if(_num_of_args == 3){
         _lines = abs(stoi(_args[1]));
     }
 }
 void HeadCommand::execute() {
+    if(_lines == -1) return;
     if(_num_of_args == 1){
         cerr<<"smash error: head: not enough arguments"<<endl;
         return;
