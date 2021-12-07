@@ -86,7 +86,7 @@ inline void ErrorHandling(string syscall, bool to_exit){ /* General error messag
 }
 
 enum cmd_type{ builtIn, external, special, timedout};
-cmd_type FindCmdType(Command* cmd);
+cmd_type FindCmdType(const string& cmd_line);
 
 /**********************************************************************************************************************/
 /*****************************************SmallShell IMPLEMENTATION****************************************************/
@@ -108,7 +108,7 @@ void SmallShell::executeCommand(const char *cmd_line) {
     Command* cmd = CreateCommand(cmd_line); // external commands must fork
     if(cmd == nullptr) return;
     smash.getJobsList().removeFinishedJobs();
-    if(FindCmdType(cmd) == timedout){
+    if(FindCmdType(cmd->getCmdLine()) == timedout){
         cmd->execute();
         delete cmd;
     }
@@ -215,9 +215,7 @@ void ExternalCommand::execute() {
     if (ext_pid == 0) { //child process
         setpgrp();
         _removeBackgroundSign(argv[2]);
-        if (execv(bash_cmd, argv) == -1){
-            ErrorHandling("execv", true);
-        }
+        if (execv(bash_cmd, argv) == -1) ErrorHandling("execv", true);
     } else { // parent process
         int wstatus;
         if(_isBackgroundComamnd(cmd_c)) smash.getJobsList().addJob(this, ext_pid);
@@ -608,13 +606,6 @@ void RedirectionCommand::execute() { //todo try and catch
     if (close(old_std_out) == -1) return ErrorHandling("close");
 
 }
-//    if(dynamic_cast<ExternalCommand*>(command)){ // external command
-//
-//    }
-//    else{ //build-in command
-//
-//
-//    }
 
 /************** pipe ********************/
 
@@ -751,16 +742,17 @@ TimedOutCommand::TimedOutCommand(const char* cmd_line, time_t start): Command(cm
     char* args_array[MAX_COMMAND_LENGTH];
     int arg_num = _parseCommandLine(cmd_line, args_array);
     /*-------------Errors handling??--------------------*/
-    _timed_cmd = cmd_s.substr(2,arg_num).c_str();
+    _timed_cmd = cmd_s.substr(cmd_s.find_first_of(WHITESPACE) + 1);
+    _timed_cmd = _timed_cmd.substr(_timed_cmd.find_first_of(WHITESPACE) + 1);
     duration = stoi(args_array[1]);
     for(int i = 0; i < arg_num; i++) free(args_array[i]);
 }
 
 
-cmd_type FindCmdType(Command* cmd){
-    string firstWord = cmd->getCmdLine().substr(0,1);
-    unsigned re_index = findRedirectionCommand(cmd->getCmdLine().c_str());
-    unsigned pipe_index = findPipeCommand(cmd->getCmdLine().c_str());
+cmd_type FindCmdType(const string& cmd_line){
+    string firstWord = cmd_line.substr(0,cmd_line.find_first_of(WHITESPACE));
+    unsigned re_index = findRedirectionCommand(cmd_line.c_str());
+    unsigned pipe_index = findPipeCommand(cmd_line.c_str());
     if (firstWord.compare("chprompt") == 0 || firstWord.compare("pwd") == 0 || firstWord.compare("showpid") == 0 ||
         firstWord.compare("cd") == 0 || firstWord.compare("jobs") == 0 || firstWord.compare("kill") == 0 ||
         firstWord.compare("fg") == 0 || firstWord.compare("bg") == 0 || firstWord == "quit")  return builtIn;
@@ -776,19 +768,45 @@ cmd_type FindCmdType(Command* cmd){
 
 void TimedOutCommand::execute(){
     smash.getTimedJobsList().removeFinishedJobs();
+    if(FindCmdType(_timed_cmd) != external){
+        smash.executeCommand(_timed_cmd.c_str());
+        return;
+    }
+    char cmd_line[MAX_COMMAND_LENGTH];
+    strcpy(cmd_line, _timed_cmd.c_str());
+    _removeBackgroundSign(cmd_line);
+    ExternalCommand* timed_cmd = new ExternalCommand(cmd_line);
+
     int child_pid = fork();
     if(child_pid == -1) return ErrorHandling("fork");
     else if(child_pid == 0){
-        if(setpgrp() == -1) return ErrorHandling("setpgrp");
-        smash.executeCommand(_timed_cmd.c_str());
+        if(setpgrp() == -1) return ErrorHandling("setpgrp", true);
+        int grand_pid = fork();
+        if(grand_pid == -1) return ErrorHandling("fork");
+        else if(grand_pid == 0){
+            timed_cmd->execute();
+            exit(0);
+        }
+        while(isTimeOut(start_time, time(0)) == false);
+        if(kill(grand_pid, SIGALRM) == -1) return ErrorHandling("kill");
+        exit(0);
     }
     else{
-        smash.getTimedJobsList().addJob(this, child_pid);
-        while(isTimeOut(start_time, time(0)) == false);
-        if(kill(child_pid, SIGALRM) == -1) return ErrorHandling("kill");        
+        if(_isBackgroundComamnd(_timed_cmd.c_str())) smash.getJobsList().addJob(timed_cmd, child_pid);
+        else{
+            int wstatus;
+            smash.setFGCmd(timed_cmd);
+            smash.setFGpid(child_pid);
+            if (waitpid(child_pid, &wstatus, WUNTRACED) == -1) return ErrorHandling("waitpid");
+            else if (WIFSTOPPED(wstatus)){
+                smash.getJobsList().addJob(timed_cmd, child_pid, true);
+                smash.setFGCmd(nullptr);
+                smash.setFGpid(-1);
+                timed_cmd->setCmdStatus(true);
+            } 
+        }
     }
 }
-
 
 
 /**********************************************************************************************************************/
