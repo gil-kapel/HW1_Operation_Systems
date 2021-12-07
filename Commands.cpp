@@ -155,7 +155,6 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
 
     else if(pipe_index <= MAX_COMMAND_LENGTH && pipe_index > 0) return new PipeCommand(cmd_line);
 
-
     /*Built in commands handle*/
     if (firstWord.compare("chprompt") == 0) return new ChPromptCommand(cmd_line);
 
@@ -177,7 +176,7 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
 
     else if (firstWord.compare("head") == 0) return new HeadCommand(cmd_line);
 
-    else if(firstWord == "timeout") return new TimedOutCommand(cmd_line, time(0)); /*Error handling?*/
+    else if(firstWord == "timeout") return new TimedOutCommand(cmd_line); /*Error handling?*/
 
     else return new ExternalCommand(cmd_line);
 }
@@ -198,8 +197,9 @@ BuiltInCommand::BuiltInCommand(const char *cmd_line) : Command(cmd_line) {
 }
 
 BuiltInCommand::~BuiltInCommand(){
-    for(int i = 0; i < _num_of_args; i++) {
+    for(int i = 0 ; i < _num_of_args; i++) {
         free(_args[i]);
+        _args[i] = nullptr;
     }
 }
 
@@ -287,6 +287,7 @@ void JobsList::removeFinishedJobs() {
         pid_t temp = waitpid(to_find, nullptr, WNOHANG);
         if(temp == -1) return ErrorHandling("waitpid");
         if(temp == to_find){
+            delete iter.second.getCommand();
             _jobs.erase(iter.first);
         }
     }
@@ -736,17 +737,13 @@ void HeadCommand::execute() {
     }
 }
 
+ /*****************************************TIME OUT ************************************************/
+ /**************************************************************************************************/
 
-TimedOutCommand::TimedOutCommand(const char* cmd_line, time_t start): Command(cmd_line), start_time(start){
-    string cmd_s = _trim(string(cmd_line));
-    char* args_array[MAX_COMMAND_LENGTH];
-    int arg_num = _parseCommandLine(cmd_line, args_array);
-    /*-------------Errors handling??--------------------*/
-    _timed_cmd = cmd_s.substr(cmd_s.find_first_of(WHITESPACE) + 1);
-    _timed_cmd = _timed_cmd.substr(_timed_cmd.find_first_of(WHITESPACE) + 1);
-    duration = stoi(args_array[1]);
-    for(int i = 0; i < arg_num; i++) free(args_array[i]);
-}
+ void TimeOutList::addToList(Command *cmd, pid_t pid, int duration) {
+     this->getList().push_back(TimeOutEntry(cmd, pid, duration));
+
+ }
 
 
 cmd_type FindCmdType(const string& cmd_line){

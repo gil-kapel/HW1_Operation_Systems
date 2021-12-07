@@ -13,6 +13,7 @@
 #include <fstream>
 #include <chrono>
 #include <thread>
+#include <list>
 
 using std::map;
 using std::string;
@@ -102,13 +103,30 @@ public:
     void execute() override;
 };
 
-class TimedOutCommand : public Command {
-    unsigned duration;
-    string _timed_cmd;
-    time_t start_time;
+class TimeOutEntry{
+    Command* _cmd;
+    time_t _start_time;
+    pid_t _cmd_pid;
+    int _duration;
 public:
-    explicit TimedOutCommand(const char* cmd_line, time_t start);
-    virtual ~TimedOutCommand() {}
+    TimeOutEntry(Command* cmd, pid_t pid, int duration) : _cmd(cmd), _cmd_pid(pid), _start_time(time(nullptr)), _duration(duration) {};
+    double getTimePassed() const {return difftime(time(nullptr), _start_time);}
+    ~TimeOutEntry() = default;
+};
+
+class TimeOutList{
+    std::list<TimeOutEntry> _time_out_list;
+public:
+    std::list<TimeOutEntry>& getList() {return _time_out_list;}
+    TimeOutList() = default;
+    ~TimeOutList() = default;
+    void addToList(Command* cmd, pid_t pid, int duration);
+};
+
+class TimedOutCommand : public BuiltInCommand  {
+public:
+    explicit TimedOutCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {};
+    ~TimedOutCommand() override = default;
     int getDuration(){ return duration;}
     string getTimedCommand(){return _timed_cmd;}
     bool isTimeOut(time_t start_time, time_t current_time){ return (current_time - start_time) >= duration ;}
