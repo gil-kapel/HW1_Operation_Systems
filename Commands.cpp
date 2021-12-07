@@ -158,7 +158,6 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
 
     else if(pipe_index <= MAX_COMMAND_LENGTH && pipe_index > 0) return new PipeCommand(cmd_line);
 
-
     /*Built in commands handle*/
     if (firstWord.compare("chprompt") == 0) return new ChPromptCommand(cmd_line);
 
@@ -203,8 +202,9 @@ BuiltInCommand::BuiltInCommand(const char *cmd_line) : Command(cmd_line) {
 }
 
 BuiltInCommand::~BuiltInCommand(){
-    for(int i = 0; i < _num_of_args; i++) {
+    for(int i = 0 ; i < _num_of_args; i++) {
         free(_args[i]);
+        _args[i] = nullptr;
     }
 }
 
@@ -748,6 +748,8 @@ void HeadCommand::execute() {
     }
 }
 
+ /*****************************************TIME OUT ************************************************/
+ /**************************************************************************************************/
 
 TimedOutCommand::TimedOutCommand(const char* cmd_line, time_t start): Command(cmd_line), start_time(start){
     string cmd_s = _trim(string(cmd_line));
@@ -760,6 +762,10 @@ TimedOutCommand::TimedOutCommand(const char* cmd_line, time_t start): Command(cm
     duration = stoi(args_array[1]);
     for(int i = 0; i < arg_num; i++) free(args_array[i]);
 }
+
+ void TimeOutList::addToList(Command *cmd, pid_t pid, int duration) {
+     this->getList().push_back(TimeOutEntry(cmd, pid, duration));
+ }
 
 
 cmd_type FindCmdType(const string& cmd_line){

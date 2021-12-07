@@ -4,10 +4,10 @@
 #include "Commands.h"
 
 using namespace std;
+SmallShell& smash = SmallShell::getInstance();
 
 void ctrlZHandler(int sig_num) {
     cout << "smash: got ctrl-Z" << endl;
-    SmallShell& smash = SmallShell::getInstance();
     Command* cmd = smash.getFGCmd();
     pid_t fgPid = smash.getFGpid();
     JobsList job_list = smash.getJobsList();
@@ -21,7 +21,6 @@ void ctrlZHandler(int sig_num) {
 
 void ctrlCHandler(int sig_num) {
     cout << "smash: got ctrl-C" << endl;
-    SmallShell& smash = SmallShell::getInstance();
     pid_t fgPid = smash.getFGpid();
     if(fgPid > 0){
         if(kill(fgPid ,SIGKILL) == -1) ErrorHandling("kill");
@@ -34,7 +33,6 @@ void ctrlCHandler(int sig_num) {
 
 void alarmHandler(int sig_num) {
     cout << "smash got an alarm" << endl;
-    SmallShell& smash = SmallShell::getInstance();
     JobEntry* timed_job = smash.getTimedJobsList().getJobById(smash.getTimedJobsList().getMaxId());
     Command* cmd = timed_job->getCommand();
     pid_t alarm_pid = timed_job->getCmdPid();
