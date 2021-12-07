@@ -62,8 +62,8 @@ bool _isBackgroundComamnd(const char* cmd_line) {
 void _removeBackgroundSign(char* cmd_line) {
     const string str(cmd_line);
     // find last character other than spaces
-    // unsigned int idx = str.find_last_of("&");
-    unsigned int idx = str.find_last_not_of(WHITESPACE);
+    unsigned int idx = str.find_last_of("&");
+    // unsigned int idx = str.find_last_not_of(WHITESPACE);
     // if all characters are spaces then return
     if (idx > MAX_COMMAND_LENGTH) {
         return;
@@ -87,6 +87,10 @@ inline void ErrorHandling(string syscall, bool to_exit){ /* General error messag
 
 enum cmd_type{ builtIn, external, special, timedout};
 cmd_type FindCmdType(const string& cmd_line);
+
+bool isNumber(const string &str){
+    return str.find_first_not_of("0123456789") == string::npos;
+}
 
 /**********************************************************************************************************************/
 /*****************************************SmallShell IMPLEMENTATION****************************************************/
@@ -120,7 +124,7 @@ void SmallShell::executeCommand(const char *cmd_line) {
         smash.setFGpid(getpid());
         // smash.setFGJobID(-1);
         cmd->execute();
-        if(cmd->isCmsStopped()) return;
+        if(cmd->isCmdStopped()) return;
         smash.setFGCmd(nullptr);
         smash.setFGpid(-1); // NO ONE RUNNING IN FG
         delete cmd;
@@ -131,21 +135,20 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
     string cmd_s = _trim(string(cmd_line));
     char* args_array[COMMAND_MAX_ARGS];
     int arg_num = _parseCommandLine(cmd_line, args_array);
-    string firstWord;
-    char tempWord[MAX_COMMAND_LENGTH];
+    string firstWord, secondWord;
+
     if( args_array[0] != nullptr ) {
-        firstWord = cmd_s.substr(0, cmd_s.find_first_of(" "));
-        strcpy(tempWord, firstWord.c_str());
-        _removeBackgroundSign(tempWord);
-        firstWord = tempWord;
-        firstWord = _trim(firstWord);
+        _removeBackgroundSign(args_array[0]);
+        firstWord = args_array[0];
+        if(args_array[1] != nullptr){
+            secondWord = args_array[1];
+        }
+        for(int i = 0; i < arg_num; i++) free(args_array[i]);
     }
     else {
         for(int i = 0; i < arg_num; i++) free(args_array[i]);
         return nullptr;
     }
-    // free
-    for(int i = 0; i < arg_num; i++) free(args_array[i]);
 
     /**********SPECIAL COMMAND*********/
     unsigned re_index = findRedirectionCommand(cmd_s.c_str());
@@ -177,7 +180,13 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
 
     else if (firstWord.compare("head") == 0) return new HeadCommand(cmd_line);
 
-    else if(firstWord == "timeout") return new TimedOutCommand(cmd_line, time(0)); /*Error handling?*/
+    else if(firstWord == "timeout"){
+        if(arg_num < 3 || !isNumber(secondWord)){
+            cerr << "smash error: timeout: invalid arguments" << endl;
+            return nullptr;
+        }
+        else return new TimedOutCommand(cmd_line, time(0));
+    }  /*Error handling?*/
 
     else return new ExternalCommand(cmd_line);
 }
@@ -187,10 +196,6 @@ Command * SmallShell::CreateCommand(const char* cmd_line) {
 /*********************************************************************************************************************/
 
 Command::Command(const char* cmd_line):_cmd_line(cmd_line){}
-
-bool Command::isNumber(const string &str){
-    return str.find_first_not_of("0123456789") == string::npos;
-}
 
 BuiltInCommand::BuiltInCommand(const char *cmd_line) : Command(cmd_line) {
     string cmd_s = _trim(string(cmd_line));
@@ -287,6 +292,7 @@ void JobsList::removeFinishedJobs() {
         pid_t temp = waitpid(to_find, nullptr, WNOHANG);
         if(temp == -1) return ErrorHandling("waitpid");
         if(temp == to_find){
+            delete iter.second.getCommand();
             _jobs.erase(iter.first);
         }
     }
@@ -491,7 +497,9 @@ void ForegroundCommand::execute() {
         smash.setFGCmd(nullptr);
         smash.setFGpid(-1);
         this->setCmdStatus(true);
+        return;
     }
+    delete cmd;
 }
 
 
@@ -539,8 +547,12 @@ void QuitCommand::execute() {
         int size = smash.getJobsList().getJobs().size();
         cout << "smash: sending SIGKILL signal to " << size << " jobs:" << endl;
         smash.getJobsList().killAllJobs();
+        exit(0);
     }
-    exit(0);
+    else{
+        smash.getJobsList().killAllJobs();
+        exit(0);
+    }
 }
 
 /**********************************************************************************************************************/
@@ -742,6 +754,7 @@ TimedOutCommand::TimedOutCommand(const char* cmd_line, time_t start): Command(cm
     char* args_array[MAX_COMMAND_LENGTH];
     int arg_num = _parseCommandLine(cmd_line, args_array);
     /*-------------Errors handling??--------------------*/
+
     _timed_cmd = cmd_s.substr(cmd_s.find_first_of(WHITESPACE) + 1);
     _timed_cmd = _timed_cmd.substr(_timed_cmd.find_first_of(WHITESPACE) + 1);
     duration = stoi(args_array[1]);
@@ -785,10 +798,13 @@ void TimedOutCommand::execute(){
         if(grand_pid == -1) return ErrorHandling("fork");
         else if(grand_pid == 0){
             timed_cmd->execute();
+            delete timed_cmd;
             exit(0);
         }
-        while(isTimeOut(start_time, time(0)) == false);
-        if(kill(grand_pid, SIGALRM) == -1) return ErrorHandling("kill");
+        while(isTimeOut(start_time, time(0)) == false && !wait(nullptr));
+        if(isTimeOut(start_time, time(0)) == true){
+            if(kill(grand_pid, SIGALRM) == -1) return ErrorHandling("kill");
+        }
         exit(0);
     }
     else{

@@ -47,9 +47,7 @@ public:
     // TODO: Add your extra methods if needed
     string getCmdLine() const {return _cmd_line;}
     void setCmdStatus(bool isStopped){if(isStopped) is_stopped = true; }
-    bool isCmsStopped(){return is_stopped;}
-    static bool isNumber(const string &str); // check if the string represent number
-
+    bool isCmdStopped(){return is_stopped;}
 };
 
 class BuiltInCommand : public Command {
