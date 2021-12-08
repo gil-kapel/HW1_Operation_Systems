@@ -226,7 +226,7 @@ void ExternalCommand::execute() {
             smash.getJobsList().addJob(this->getCmdLine(), ext_pid);
         }
         else{
-            smash.setFGCmd(this->getCmdLine());
+            smash.setFGCmd(cmd_s);
             smash.setFGpid(ext_pid);
             if (waitpid(ext_pid, &wstatus, WUNTRACED) == -1) return ErrorHandling("waitpid");
             else if (WIFSTOPPED(wstatus)){
