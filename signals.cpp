@@ -27,7 +27,7 @@ void ctrlCHandler(int sig_num) {
         cout << "smash: process " << fgPid << " was killed" << endl;
         smash.setFGpid(-1);
         smash.setFGJobID(-1);
-        smash.setFGCmd(nullptr);
+        smash.setFGCmd("");
     }
 }
 
@@ -41,6 +41,6 @@ void alarmHandler(int sig_num) {
         cout << "smash: " << timed_job->getCmdLine() << " timed out!" << endl;
         smash.setFGpid(-1);
         smash.setFGJobID(-1);
-        smash.setFGCmd(nullptr);
+        smash.setFGCmd("");
     }
 }

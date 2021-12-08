@@ -99,10 +99,7 @@ SmallShell::SmallShell() {
     _curr_path = dir;
 }
 
-SmallShell::~SmallShell() {
-    bool to_print = false;
-    _jobs_list.killAllJobs(to_print);
-}
+SmallShell::~SmallShell() = default;
 
 void SmallShell::executeCommand(const char *cmd_line) {
     Command* cmd = CreateCommand(cmd_line); // external commands must fork
@@ -445,7 +442,8 @@ void KillCommand::execute() {
             }
         }
         if(signum == SIGSTOP || signum == SIGTSTP){
-            job.setStatus(stopped);
+            // job.setStatus(stopped);
+            cout<< "signal number " << signum <<" was sent to pid "<< job.getCmdPid() << endl;
             return;
         }
         if(signum == SIGCONT){
@@ -467,12 +465,17 @@ void ForegroundCommand::execute() {
     int job_id_to_fg;
     if(_num_of_args == 2) {
         // check arg
-        string str_job_id = _args[1];
-        if (!isNumber(str_job_id)) {
+        string arg = _args[1];
+        if(arg[0] == '-' && isNumber(arg.substr(1))){
+            job_id_to_fg = stoi(arg);
+            cerr << "smash error: fg: job-id " << job_id_to_fg << " does not exist" << endl;
+            return;
+        }
+        if (!isNumber(arg)) {
             cerr << "smash error: fg: invalid arguments" << endl;
             return;
         }
-        job_id_to_fg = stoi(str_job_id);
+        job_id_to_fg = stoi(arg);
         if (job_id_to_fg <= 0 || !smash.getJobsList().getJobById(job_id_to_fg)) {
             cerr << "smash error: fg: job-id " << job_id_to_fg << " does not exist" << endl;
             return;
@@ -513,12 +516,17 @@ void BackgroundCommand::execute() {
     int job_id_to_running;
     if(_num_of_args == 2) {
         // check arg
-        string str_job_id = _args[1];
-        if (!isNumber(str_job_id)) {
+        string arg = _args[1];
+        if(arg[0] == '-' && isNumber(arg.substr(1))){
+            job_id_to_running = stoi(arg);
+            cerr << "smash error: bg: job-id " << job_id_to_running << " does not exist" << endl;
+            return;
+        }
+        if (!isNumber(arg)) {
             cerr << "smash error: bg: invalid arguments" << endl;
             return;
         }
-        job_id_to_running = stoi(str_job_id);
+        job_id_to_running = stoi(arg);
         if (job_id_to_running <= 0 || !smash.getJobsList().getJobById(job_id_to_running)) {
             cerr << "smash error: bg: job-id " << job_id_to_running << " does not exist" << endl;
             return;
@@ -693,7 +701,7 @@ void PipeCommand::execute() {
         exit(0);
     }
     else{
-        if (waitpid(first_pid, nullptr, WUNTRACED) == -1)  return ErrorHandling("waitpid");
+        if (waitpid(first_pid, nullptr, WNOHANG) == -1)  return ErrorHandling("waitpid");
         pid_t sec_pid = fork();
         if(sec_pid == -1) return ErrorHandling("fork");
         if(sec_pid == 0){
@@ -718,7 +726,7 @@ void PipeCommand::execute() {
         }
         if(close(fd[1]) == -1) return ErrorHandling("close");
         if(close(fd[0]) == -1) return ErrorHandling("close");
-        if (waitpid(sec_pid, nullptr, WUNTRACED) == -1)  return ErrorHandling("waitpid");
+        if(waitpid(sec_pid, nullptr, WNOHANG) == -1)  return ErrorHandling("waitpid");
     }
     // restore STDIN, STDOUT, STDERROR
     if(dup2(old_std_in, 0) == -1) return ErrorHandling("dup2");
