@@ -17,6 +17,8 @@
 
 using std::map;
 using std::string;
+class SmallShell;
+
 
 #define COMMAND_ARGS_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
@@ -25,13 +27,13 @@ using std::string;
 #define MAX_COMMAND_LENGTH (80)
 
 const string WHITESPACE = " \n\r\t\f\v";
-class SmallShell;
+
 
 enum status{
     stopped, runningBG
 };
 
-void ErrorHandling(string syscall, bool to_exit = false);
+void ErrorHandling(string syscall);
 int findRedirectionCommand(const string& cmd_line);
 int findPipeCommand(const string& cmd_line);
 
@@ -64,7 +66,7 @@ public:
 
 class ExternalCommand : public Command {
 public:
-    ExternalCommand(const char* cmd_line) : Command(cmd_line) {};
+    explicit ExternalCommand(const char* cmd_line) : Command(cmd_line) {};
     ~ExternalCommand() override = default;
     void execute() override;
 };
@@ -102,14 +104,22 @@ public:
 };
 
 class TimeOutEntry{
-    Command* _cmd;
+    string _cmd_line;
     time_t _start_time;
     pid_t _cmd_pid;
     int _duration;
+    bool _is_finish = false;
 public:
-    TimeOutEntry(Command* cmd, pid_t pid, int duration) : _cmd(cmd), _cmd_pid(pid), _start_time(time(nullptr)), _duration(duration) {};
+    TimeOutEntry(string cmd, pid_t pid, int duration) : _cmd_line(cmd), _cmd_pid(pid), _start_time(time(nullptr)), _duration(duration) {};
     double getTimePassed() const {return difftime(time(nullptr), _start_time);}
     ~TimeOutEntry() = default;
+    bool isTimeOut() const { return getTimePassed() >= _duration ;}
+    int getDuration() const { return _duration;}
+    string getCmdLine() {return _cmd_line;}
+    pid_t getPid() const {return _cmd_pid;}
+    int getTimeUntilKill() const {return _start_time+_duration - time(NULL);}
+    bool getIfFinish() const {return _is_finish;}
+    void setIfFinish(bool flag){_is_finish = flag;}
 };
 
 class TimeOutList{
@@ -119,15 +129,15 @@ public:
     TimeOutList() = default;
     ~TimeOutList() = default;
     void addToList(Command* cmd, pid_t pid, int duration);
+    void removeTimeOutByPid(pid_t pid);
+    int getMinAlarm();
+    TimeOutEntry& getTimeOutEntryByPid(pid_t pid);
 };
 
 class TimedOutCommand : public BuiltInCommand  {
 public:
     explicit TimedOutCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {};
     ~TimedOutCommand() override = default;
-    int getDuration(){ return duration;}
-    string getTimedCommand(){return _timed_cmd;}
-    bool isTimeOut(time_t start_time, time_t current_time){ return (current_time - start_time) >= duration ;}
     void execute() override;
 };
 
@@ -136,24 +146,21 @@ public:
 
 class JobEntry {
     int _job_id;
-    Command* _command;
+    string _command;
     time_t _start_time;
     status _status; // status == 1 -> stopped other running in the bg
     pid_t _cmd_pid;
 public:
-    JobEntry(int job_id = -1, Command* command = nullptr, pid_t pid = -1, time_t t = time(0), status s=runningBG) : _job_id(job_id), _command(command), _cmd_pid(pid), _start_time(t),_status(s) {};
+    explicit JobEntry(int job_id = -1, string command = "", pid_t pid = -1, time_t t = time(0), status s=runningBG) : _job_id(job_id), _command(command), _cmd_pid(pid), _start_time(t),_status(s) {};
     JobEntry(const JobEntry& job) { _job_id = job._job_id, _command = job._command, _cmd_pid = job._cmd_pid, _start_time = job._start_time,_status = job._status;}
     ~JobEntry() = default;
     int getJobId() const {return _job_id;}
     int getCmdPid() const {return _cmd_pid;}
-    string getCmdLine() const {return _command->getCmdLine();}
+    string getCmdLine() const {return _command;}
     double getSecondElapsed() const {return difftime(time(nullptr), _start_time);}
     status getStatus() const{ return _status;}
-    void setStatus(status newStatus) {
-        _status = newStatus;
-        _command->setCmdStatus(newStatus == stopped);
-    }
-    Command* getCommand() const{return _command;}
+    void setStatus(status newStatus) {_status = newStatus;}
+    string getCommand() const{return _command;}
 };
 
 class JobsList {
@@ -163,13 +170,12 @@ class JobsList {
 public:
     JobsList() = default;
     ~JobsList() = default;
-    void addJob(Command* cmd_line, pid_t pid, bool isStopped = false);
+    void addJob(string cmd_line, pid_t pid, bool isStopped = false);
     void printJobsList();
     void killAllJobs(bool to_print = true);
-    void removeFinishedJobs();
     void removeJobById(int jobId){ _jobs.erase(jobId); }
     JobEntry * getJobById(int jobId);
-    int getMaxId() { return (_jobs.empty()) ? 1 : ( ((_jobs.rbegin())->first) +1 ); }
+    int getMaxId() { return (_jobs.empty()) ? 1 : ( ((_jobs.rbegin())->first) + 1 ); }
     map<int, JobEntry>& getJobs() {return _jobs;}
     int getLastJob();
     int getLastStoppedJob();
@@ -264,18 +270,18 @@ class SmallShell {
 private:
     string _name = "smash";
     JobsList _jobs_list;
-    JobsList _timed_jobs_list;
+    TimeOutList _timed_jobs_list;
     int _pid;
     SmallShell();
     string _last_path = "";
     string _curr_path;
     // string _FG_cmd = "";
-    Command* _FG_cmd;
+    string _FG_cmd;
     pid_t _FG_pid = -1;
     pid_t _FG_Job_ID = -1;
     bool _is_redirection = false;
-
 public:
+    bool isItQuit = false;
     Command *CreateCommand(const char* cmd_line);
     SmallShell(SmallShell const&)      = delete; // disable copy ctor
     void operator=(SmallShell const&)  = delete; // disable = operator
@@ -296,13 +302,14 @@ public:
     void setLastPath(string newLastPath){_last_path = newLastPath;}
     void setCurrPath(string newCurrPath){_curr_path = newCurrPath;}
     JobsList& getJobsList() {return _jobs_list;}
-    JobsList& getTimedJobsList() {return _timed_jobs_list;}
-    Command* getFGCmd() const {return _FG_cmd;}
-    void setFGCmd(Command* newFGCmd){ _FG_cmd = newFGCmd;}
+    TimeOutList& getTimedList() {return _timed_jobs_list;}
+    string getFGCmd() const {return _FG_cmd;}
+    void setFGCmd(string newFGCmd){ _FG_cmd = newFGCmd;}
     pid_t getFGpid() const {return _FG_pid;}
     pid_t getFGJobID() const {return _FG_Job_ID;}
     void setFGpid(pid_t newFGpid){ _FG_pid = newFGpid;}
     void setFGJobID(pid_t newFGJobID){ _FG_Job_ID = newFGJobID;}
+    void removeFinishedJobs();
 
 };
 
