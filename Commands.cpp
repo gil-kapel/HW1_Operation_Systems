@@ -100,6 +100,10 @@ SmallShell::SmallShell() {
 }
 
 SmallShell::~SmallShell() = default;
+// {
+//     bool to_print = false;
+//     _jobs_list.killAllJobs(to_print);
+// }
 
 void SmallShell::executeCommand(const char *cmd_line) {
     Command* cmd = CreateCommand(cmd_line); // external commands must fork
@@ -701,7 +705,7 @@ void PipeCommand::execute() {
         exit(0);
     }
     else{
-        if (waitpid(first_pid, nullptr, WNOHANG) == -1)  return ErrorHandling("waitpid");
+        if (waitpid(first_pid, nullptr, WUNTRACED) == -1)  return ErrorHandling("waitpid");
         pid_t sec_pid = fork();
         if(sec_pid == -1) return ErrorHandling("fork");
         if(sec_pid == 0){
@@ -726,7 +730,7 @@ void PipeCommand::execute() {
         }
         if(close(fd[1]) == -1) return ErrorHandling("close");
         if(close(fd[0]) == -1) return ErrorHandling("close");
-        if(waitpid(sec_pid, nullptr, WNOHANG) == -1)  return ErrorHandling("waitpid");
+        if (waitpid(sec_pid, nullptr, WUNTRACED) == -1)  return ErrorHandling("waitpid");
     }
     // restore STDIN, STDOUT, STDERROR
     if(dup2(old_std_in, 0) == -1) return ErrorHandling("dup2");
