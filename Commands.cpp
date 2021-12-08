@@ -693,6 +693,7 @@ void PipeCommand::execute() {
         exit(0);
     }
     else{
+        if (waitpid(first_pid, nullptr, WUNTRACED) == -1)  return ErrorHandling("waitpid");
         pid_t sec_pid = fork();
         if(sec_pid == -1) return ErrorHandling("fork");
         if(sec_pid == 0){
@@ -715,10 +716,9 @@ void PipeCommand::execute() {
             delete second_command;
             exit(0);
         }
-        if(close(fd[0]) == -1) return ErrorHandling("close");
         if(close(fd[1]) == -1) return ErrorHandling("close");
-        if (waitpid(first_pid, nullptr, 0) == -1)  return ErrorHandling("waitpid");
-        if (waitpid(sec_pid, nullptr, 0) == -1)  return ErrorHandling("waitpid");
+        if(close(fd[0]) == -1) return ErrorHandling("close");
+        if (waitpid(sec_pid, nullptr, WUNTRACED) == -1)  return ErrorHandling("waitpid");
     }
     // restore STDIN, STDOUT, STDERROR
     if(dup2(old_std_in, 0) == -1) return ErrorHandling("dup2");
