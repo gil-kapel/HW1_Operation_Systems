@@ -13,6 +13,7 @@
 #include <fstream>
 #include <chrono>
 #include <thread>
+#include <list>
 
 using std::map;
 using std::string;
@@ -44,7 +45,6 @@ public:
     virtual void execute() = 0;
     //virtual void prepare();
     //virtual void cleanup();
-    // TODO: Add your extra methods if needed
     string getCmdLine() const {return _cmd_line;}
     void setCmdStatus(bool isStopped){if(isStopped) is_stopped = true; }
     bool isCmsStopped(){return is_stopped;}
@@ -103,18 +103,44 @@ public:
     void execute() override;
 };
 
-class TimedOutCommand : public Command {
-    unsigned duration;
-    string _timed_cmd;
-    time_t start_time;
+class TimeOutEntry{
+    string _cmd_line;
+    time_t _start_time;
+    pid_t _cmd_pid;
+    int _duration;
+    bool _is_finish = false;
 public:
-    explicit TimedOutCommand(const char* cmd_line, time_t start);
-    virtual ~TimedOutCommand() {}
-    int getDuration(){ return duration;}
-    string getTimedCommand(){return _timed_cmd;}
-    bool isTimeOut(time_t start_time, time_t current_time){ return (current_time - start_time) >= duration ;}
+    TimeOutEntry(string cmd, pid_t pid, int duration) : _cmd_line(cmd), _cmd_pid(pid), _start_time(time(nullptr)), _duration(duration) {};
+    double getTimePassed() const {return difftime(time(nullptr), _start_time);}
+    ~TimeOutEntry() = default;
+    bool isTimeOut() const { return getTimePassed() >= _duration ;}
+    int getDuration() const { return _duration;}
+    string getCmdLine() {return _cmd_line;}
+    pid_t getPid() const {return _cmd_pid;}
+    int getTimeUntilKill() const {return _start_time + _duration - time(NULL);}
+    bool getIfFinish() const {return _is_finish;}
+    void setIfFinish(bool flag){_is_finish = flag;}
+};
+
+class TimeOutList{
+    std::list<TimeOutEntry> _time_out_list;
+public:
+    std::list<TimeOutEntry>& getList() {return _time_out_list;}
+    TimeOutList() = default;
+    ~TimeOutList() = default;
+    void addToList(string cmd, pid_t pid, int duration);
+    void removeTimeOutByPid(pid_t pid);
+    int getMinAlarm();
+    TimeOutEntry& getTimeOutEntryByPid(pid_t pid);
+};
+
+class TimedOutCommand : public BuiltInCommand  {
+public:
+    explicit TimedOutCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {};
+    ~TimedOutCommand() override = default;
     void execute() override;
 };
+
 
 /*********************************************************************************************************************/
 /*****************************************JOB LIST*******************************************************************/
@@ -148,8 +174,8 @@ public:
     void addJob(string cmd_line, pid_t pid, bool isStopped = false);
     void printJobsList();
     void killAllJobs(bool to_print = true);
-    void removeFinishedJobs();
     void removeJobById(int jobId){ _jobs.erase(jobId); }
+    void removeJobByPid(int pid);
     JobEntry * getJobById(int jobId);
     int getMaxId() { return (_jobs.empty()) ? 1 : ( ((_jobs.rbegin())->first) +1 ); }
     map<int, JobEntry>& getJobs() {return _jobs;}
@@ -216,7 +242,6 @@ public:
 };
 
 class ForegroundCommand : public BuiltInCommand {
-    // TODO: Add your data members
 public:
     explicit ForegroundCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {};
     ~ForegroundCommand() override = default;
@@ -224,7 +249,6 @@ public:
 };
 
 class BackgroundCommand : public BuiltInCommand {
-    // TODO: Add your data members
 public:
     explicit BackgroundCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {};
     ~BackgroundCommand() override = default;
@@ -232,7 +256,6 @@ public:
 };
 
 class QuitCommand : public BuiltInCommand {
-// TODO: Add your data members public:
 public:
     explicit QuitCommand(const char* cmd_line) : BuiltInCommand(cmd_line) {};
     ~QuitCommand() override = default;
@@ -246,7 +269,7 @@ class SmallShell {
 private:
     string _name = "smash";
     JobsList _jobs_list;
-    JobsList _timed_jobs_list;
+    TimeOutList _timed_jobs_list;
     int _pid;
     SmallShell();
     string _last_path = "";
@@ -257,6 +280,8 @@ private:
     bool _is_redirection = false;
 
 public:
+    string _time_out_cmd = "";
+    int _time_out_duration = -1;
     bool isQuit = false;
     Command* CreateCommand(const char* cmd_line);
     SmallShell(SmallShell const&)      = delete; // disable copy ctor
@@ -278,13 +303,15 @@ public:
     void setLastPath(string newLastPath){_last_path = newLastPath;}
     void setCurrPath(string newCurrPath){_curr_path = newCurrPath;}
     JobsList& getJobsList() {return _jobs_list;}
-    JobsList& getTimedJobsList() {return _timed_jobs_list;}
+    TimeOutList& getTimedList() {return _timed_jobs_list;}
     string getFGCmd() const {return _FG_cmd;}
     void setFGCmd(string newFGCmd){ _FG_cmd = newFGCmd;}
     pid_t getFGpid() const {return _FG_pid;}
     pid_t getFGJobID() const {return _FG_Job_ID;}
     void setFGpid(pid_t newFGpid){ _FG_pid = newFGpid;}
     void setFGJobID(pid_t newFGJobID){ _FG_Job_ID = newFGJobID;}
+    void removeFinishedJobs();
+
 
 };
 

@@ -32,15 +32,21 @@ void ctrlCHandler(int sig_num) {
 }
 
 void alarmHandler(int sig_num) {
-    cout << "smash got an alarm" << endl;
+    cout<< "smash: got an alarm" <<endl;
     SmallShell& smash = SmallShell::getInstance();
-    JobEntry* timed_job = smash.getTimedJobsList().getJobById(smash.getTimedJobsList().getMaxId());
-    pid_t alarm_pid = timed_job->getCmdPid();
-    if(alarm_pid == smash.getFGpid()){
-        if(kill(alarm_pid, SIGKILL) == -1) ErrorHandling("kill");
-        cout << "smash: " << timed_job->getCmdLine() << " timed out!" << endl;
-        smash.setFGpid(-1);
-        smash.setFGJobID(-1);
-        smash.setFGCmd("");
+    smash.removeFinishedJobs();
+    for(auto &iter : smash.getTimedList().getList()){
+        if(smash.getTimedList().getList().empty()) break;
+        if(iter.getPid() != smash.getPid()){
+            if(iter.getTimePassed() >= iter.getDuration()){
+                if(!(iter.getIfFinish())){
+                    if (kill(iter.getPid(), SIGKILL) == -1) ErrorHandling("kill");
+                    cout << "smash: " << iter.getCmdLine() << " timed out!" << endl;
+                    smash.getJobsList().removeJobByPid(iter.getPid());
+                    
+                }
+                smash.getTimedList().removeTimeOutByPid(iter.getPid());
+            }
+        }
     }
 }
